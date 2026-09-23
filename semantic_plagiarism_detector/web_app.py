@@ -220,17 +220,17 @@ HTML = r"""<!DOCTYPE html>
   }
   button:active { transform: scale(0.92); }
   
-  .btn-primary { background: linear-gradient(135deg, var(--text-main), #555); color: var(--bg-color); box-shadow: 0 8px 20px rgba(0,0,0,0.2); padding: 0.8rem 2rem; font-size: 1.05rem; }
+  .btn-primary { background: linear-gradient(135deg, var(--text-main), #555); color: var(--bg-color); box-shadow: 0 8px 20px rgba(0,0,0,0.2); padding: 0.8rem 2.5rem; font-size: 1.05rem; }
   .dark .btn-primary { background: linear-gradient(135deg, #fff, #bbb); color: #000; }
   .btn-primary:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 12px 28px rgba(0,0,0,0.25); }
   
   .btn-secondary { background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
   .btn-secondary:hover { transform: translateY(-2px); background: var(--glass-border); }
 
-  /* The Arrow morphs into the loader perfectly */
+  /* The physical spinning loader animation */
   @keyframes circular-loading {
-    0% { transform: translate(-50%, -50%) scale(3) rotate(0deg); }
-    100% { transform: translate(-50%, -50%) scale(3) rotate(360deg); }
+    0% { transform: translate(-50%, -50%) scale(2.5) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) scale(2.5) rotate(360deg); }
   }
   .spinning-loader {
     animation: circular-loading 1s cubic-bezier(0.68, -0.55, 0.26, 1.55) infinite !important;
@@ -238,7 +238,7 @@ HTML = r"""<!DOCTYPE html>
   
   .loader-text { 
     font-size: 1.2rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--text-main); 
-    opacity: 0; position: fixed; top: calc(50% + 60px); left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 50;
+    opacity: 0; position: fixed; top: calc(50% + 50px); left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 50;
     transition: opacity 0.4s;
   }
   .loader-text.active { opacity: 1; animation: pulse 1.5s infinite; }
@@ -388,13 +388,16 @@ HTML = r"""<!DOCTYPE html>
     </div>
     
     <div class="actions">
-      <!-- The button with the arrow that gets physically extracted -->
+      <!-- The button with the arrow that morphs into a circle physically -->
       <button class="btn-primary" id="analyzeBtn" onclick="runAnalysis(event)">
-        Analyze Documents
-        <!-- This exact SVG element will leave the button and spin in the center -->
-        <svg id="btnArrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 8px;">
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-          <polyline points="12 5 19 12 12 19"></polyline>
+        Analyze
+        <!-- This exact SVG element transforms! -->
+        <svg id="btnArrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 8px; overflow: visible; transition: stroke 0.9s ease;">
+          <g id="arrowShape" style="transition: all 0.5s cubic-bezier(0.3, 1, 0.7, 1); transform-origin: center;">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </g>
+          <circle id="circleShape" cx="12" cy="12" r="10" style="opacity: 0; stroke-dasharray: 65; stroke-dashoffset: 65; transition: all 0.6s cubic-bezier(0.5, 0, 0.2, 1); transform-origin: center;"></circle>
         </svg>
       </button>
       <button class="btn-secondary" onclick="loadSample('para')">Demo: Paraphrase</button>
@@ -405,6 +408,7 @@ HTML = r"""<!DOCTYPE html>
   
   <div class="results-section" id="resultsSection">
     <div class="actions" style="margin-bottom: 0;">
+      <!-- This triggers the precise return flight animation -->
       <button class="btn-secondary" onclick="resetView()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back to Editor
       </button>
@@ -498,49 +502,82 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+// ----------------------------------------------------------------------
+// Perfect Return Flight Animation (From loading spinner back into the button)
+// ----------------------------------------------------------------------
 function resetView() {
+  // Hide results
   resSec.classList.remove('visible');
   
+  // 1. Arrow un-hides in the center of the screen
+  btnArrow.style.transition = 'opacity 0.2s ease, stroke 0.6s ease';
+  btnArrow.style.opacity = '1';
+  
+  // 2. Morph the shapes inside the SVG back into an arrow!
+  document.getElementById('circleShape').style.opacity = '0';
+  document.getElementById('circleShape').style.strokeDashoffset = '65'; // Undraw the circle
+  document.getElementById('arrowShape').style.opacity = '1';
+  document.getElementById('arrowShape').style.transform = 'scale(1)'; // Bring arrow lines back
+  btnArrow.classList.remove('spinning-loader'); // Stop the spinning
+  
+  // 3. Create a dummy placeholder in the button so we can measure the exact target coordinate
+  const dummy = document.createElement('div');
+  dummy.style.width = '18px';
+  dummy.style.height = '18px';
+  dummy.style.marginLeft = '8px';
+  dummy.style.display = 'inline-block';
+  analyzeBtn.appendChild(dummy);
+  
+  // 4. Instantly snap the editor section back to its normal layout position temporarily 
+  // to get the true destination coordinates of the button
+  inputSec.style.position = 'relative';
+  inputSec.style.transition = 'none';
+  inputSec.classList.remove('pulled-away');
+  
+  // 5. Measure exactly where the arrow needs to land!
+  const targetRect = dummy.getBoundingClientRect();
+  
+  // 6. Snap the editor section instantly back to the hidden 'pulled-away' state so the user doesn't see it
+  inputSec.classList.add('pulled-away');
+  
+  // Force browser layout reflow
+  void inputSec.offsetWidth;
+  
+  // 7. Now restore the smooth transition on the editor section and trigger it to animate in normally
+  inputSec.style.transition = 'all 0.9s cubic-bezier(0.68, -0.15, 0.26, 1.15)';
+  inputSec.classList.remove('pulled-away');
+  
+  // 8. Animate the exact same physical SVG flying straight into the moving button!
+  // It perfectly synchronizes its arrival!
+  btnArrow.style.transition = 'left 0.9s cubic-bezier(0.68, -0.15, 0.26, 1.15), top 0.9s cubic-bezier(0.68, -0.15, 0.26, 1.15), transform 0.9s cubic-bezier(0.5, 0, 0.2, 1), stroke 0.9s ease';
+  btnArrow.style.left = targetRect.left + 'px';
+  btnArrow.style.top = targetRect.top + 'px';
+  btnArrow.style.transform = 'translate(0, 0) scale(1)';
+  
+  const btnStyle = window.getComputedStyle(analyzeBtn);
+  btnArrow.style.stroke = btnStyle.color;
+  
   setTimeout(() => {
-    resSec.style.display = 'none';
-    inputSec.style.position = 'relative';
-    inputSec.classList.remove('pulled-away');
-    
-    // Put the exact same arrow back into the button
-    btnArrow.classList.remove('spinning-loader');
-    btnArrow.style.transition = 'none';
-    btnArrow.style.transform = 'none';
+    // 9. When the journey is over, seamlessly place the real SVG back inside the actual button DOM
+    btnArrow.style.transition = 'stroke 0.9s ease';
     btnArrow.style.position = 'static';
     btnArrow.style.left = 'auto';
     btnArrow.style.top = 'auto';
-    btnArrow.style.width = '18px';
-    btnArrow.style.height = '18px';
-    btnArrow.style.stroke = 'currentColor';
-    analyzeBtn.appendChild(btnArrow);
+    analyzeBtn.replaceChild(btnArrow, dummy); // Swap out the dummy
     
-    document.getElementById('loaderText').classList.remove('active');
+    // Hide results panel entirely
+    resSec.style.display = 'none';
     
-    // reset gauge
+    // reset gauge for next time
     const fg = document.getElementById('gaugeFg');
     fg.style.transition = 'none';
     fg.style.strokeDashoffset = 502.65;
-  }, 600); // wait for results to animate out
+  }, 900); // 900ms matches the flight duration perfectly
 }
 
-function animateVal(id, start, end, dur) {
-  const el = document.getElementById(id);
-  let startT = null;
-  const step = (t) => {
-    if (!startT) startT = t;
-    const p = Math.min((t - startT) / dur, 1);
-    const ease = 1 - Math.pow(1 - p, 4);
-    const v = start + (end - start) * ease;
-    el.textContent = (end % 1 !== 0) ? v.toFixed(1) : Math.round(v);
-    if (p < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-}
-
+// ----------------------------------------------------------------------
+// Cinematic Arrow-Detach & Morph Sequence
+// ----------------------------------------------------------------------
 async function runAnalysis(event) {
   const src = sourceEl.value.trim();
   const sus = suspectEl.value.trim();
@@ -549,7 +586,7 @@ async function runAnalysis(event) {
   // 1. Get exact coordinates of the arrow *inside* the button
   const rect = btnArrow.getBoundingClientRect();
   
-  // 2. Detach the arrow and append it directly to the body so it floats above everything
+  // 2. Detach the EXACT same physical SVG element and append it directly to the body
   document.body.appendChild(btnArrow);
   
   // 3. Pin it exactly where it just was, with absolutely no visual jump
@@ -572,20 +609,26 @@ async function runAnalysis(event) {
   inputSec.classList.add('pulled-away');
   
   // 6. Animate the EXACT SAME arrow traveling in a beautiful arc to the center
-  // Different easings for left vs top creates a physical curve/arc trajectory!
   btnArrow.style.transition = 'left 0.9s cubic-bezier(0.3, 1, 0.7, 1), top 0.9s cubic-bezier(0.7, 0, 0.3, 1), transform 0.9s cubic-bezier(0.5, 0, 0.2, 1), stroke 0.9s ease';
   
   btnArrow.style.left = '50%';
   btnArrow.style.top = '50%';
-  btnArrow.style.transform = 'translate(-50%, -50%) scale(3)'; // Arrow scales up
-  btnArrow.style.stroke = 'var(--accent)'; // Arrow becomes blue
+  btnArrow.style.transform = 'translate(-50%, -50%) scale(2.5)'; // Scale up to loader size
+  btnArrow.style.stroke = 'var(--accent)'; // Turn blue
+  
+  // While traveling, morph the arrow shape into a circle loader!
+  document.getElementById('arrowShape').style.opacity = '0';
+  document.getElementById('arrowShape').style.transform = 'scale(0.5)'; // Shrink arrow lines
+  
+  document.getElementById('circleShape').style.opacity = '1';
+  document.getElementById('circleShape').style.strokeDashoffset = '0'; // Draw the circle!
   
   // Hide position layout flow immediately after animation starts
   setTimeout(() => {
     inputSec.style.position = 'absolute';
   }, 400);
   
-  // 7. Once it reaches the center, it seamlessly "curves into a circular loading motion" by spinning!
+  // 7. Once it reaches the center, start spinning the SVG!
   setTimeout(() => {
     btnArrow.classList.add('spinning-loader');
     document.getElementById('loaderText').classList.add('active');
@@ -605,11 +648,11 @@ async function runAnalysis(event) {
     setTimeout(() => {
       // Fade out the spinning arrow before revealing results
       btnArrow.style.transition = 'opacity 0.4s ease';
-      btnArrow.style.opacity = '0';
+      btnArrow.style.opacity = '0'; // Hide arrow for results view
       document.getElementById('loaderText').classList.remove('active');
       
       setTimeout(() => {
-        // Arrow is now invisible, render results
+        // Arrow is now hidden, render results
         renderResults(data);
       }, 400);
     }, 2000);
@@ -619,7 +662,7 @@ async function runAnalysis(event) {
     setTimeout(() => {
       inputSec.style.position = 'relative';
       inputSec.classList.remove('pulled-away');
-      resetView(); // puts arrow back
+      resetView(); // puts arrow back perfectly
       showToast(e.message);
     }, 400);
   }
@@ -714,8 +757,6 @@ function downloadReport(type) {
 
 window.addEventListener('DOMContentLoaded', () => loadSample('para'));
 </script>
-</body>
-</html>
 """
 
 # ---------------------------------------------------------------------------
