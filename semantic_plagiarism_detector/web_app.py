@@ -440,7 +440,7 @@ HTML = r"""<!DOCTYPE html>
     </div>
     
     <div class="actions">
-      <button class="btn-primary" onclick="runAnalysis()">Analyze Documents</button>
+      <button class="btn-primary" onclick="runAnalysis()">Analyze</button>
       <button class="btn-secondary" onclick="loadSample('para')">Demo: Paraphrase</button>
       <button class="btn-secondary" onclick="loadSample('light')">Demo: Light Edit</button>
       <button class="btn-secondary" onclick="loadSample('diff')">Demo: Unrelated</button>
