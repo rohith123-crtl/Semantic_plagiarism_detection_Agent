@@ -547,32 +547,40 @@ function resetView() {
   inputSec.style.transition = 'all 0.9s cubic-bezier(0.68, -0.15, 0.26, 1.15)';
   inputSec.classList.remove('pulled-away');
   
-  // 8. Animate the exact same physical SVG flying straight into the moving button!
-  // It perfectly synchronizes its arrival!
-  btnArrow.style.transition = 'left 0.9s cubic-bezier(0.68, -0.15, 0.26, 1.15), top 0.9s cubic-bezier(0.68, -0.15, 0.26, 1.15), transform 0.9s cubic-bezier(0.5, 0, 0.2, 1), stroke 0.9s ease';
-  btnArrow.style.left = targetRect.left + 'px';
-  btnArrow.style.top = targetRect.top + 'px';
-  btnArrow.style.transform = 'translate(0, 0) scale(1)';
-  
+  // 8. Animate the L-Shape flight!
   const btnStyle = window.getComputedStyle(analyzeBtn);
+  
+  // Phase 1: Go straight horizontally (Left) to align with the button's X coordinate!
+  btnArrow.style.transition = 'left 0.6s cubic-bezier(0.5, 0, 0.2, 1), transform 0.6s ease, stroke 0.6s ease';
+  btnArrow.style.left = targetRect.left + 'px'; // Move left
+  // Keep Y centered at 50% for now
+  btnArrow.style.transform = 'translate(0, -50%) scale(1)';
   btnArrow.style.stroke = btnStyle.color;
   
+  // Phase 2: Take a sharp turn down into the moving button as the page arrives
   setTimeout(() => {
-    // 9. When the journey is over, seamlessly place the real SVG back inside the actual button DOM
-    btnArrow.style.transition = 'stroke 0.9s ease';
-    btnArrow.style.position = 'static';
-    btnArrow.style.left = 'auto';
-    btnArrow.style.top = 'auto';
-    analyzeBtn.replaceChild(btnArrow, dummy); // Swap out the dummy
+    btnArrow.style.transition = 'top 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.4s ease'; // fast drop
+    btnArrow.style.top = targetRect.top + 'px';
+    // Remove the -50% Y translation so it perfectly aligns with top
+    btnArrow.style.transform = 'translate(0, 0) scale(1)';
     
-    // Hide results panel entirely
-    resSec.style.display = 'none';
-    
-    // reset gauge for next time
-    const fg = document.getElementById('gaugeFg');
-    fg.style.transition = 'none';
-    fg.style.strokeDashoffset = 502.65;
-  }, 900); // 900ms matches the flight duration perfectly
+    setTimeout(() => {
+      // 9. When the journey is over, seamlessly place the real SVG back inside the actual button DOM
+      btnArrow.style.transition = 'none';
+      btnArrow.style.position = 'static';
+      btnArrow.style.left = 'auto';
+      btnArrow.style.top = 'auto';
+      analyzeBtn.replaceChild(btnArrow, dummy); // Swap out the dummy
+      
+      // Hide results panel entirely
+      resSec.style.display = 'none';
+      
+      // reset gauge for next time
+      const fg = document.getElementById('gaugeFg');
+      fg.style.transition = 'none';
+      fg.style.strokeDashoffset = 502.65;
+    }, 450); // wait for drop to finish
+  }, 500); // start drop slightly before page fully lands
 }
 
 // ----------------------------------------------------------------------
@@ -608,31 +616,34 @@ async function runAnalysis(event) {
   // 5. Trigger the pull away animation for the inputs
   inputSec.classList.add('pulled-away');
   
-  // 6. Animate the EXACT SAME arrow traveling in a beautiful arc to the center
-  btnArrow.style.transition = 'left 0.9s cubic-bezier(0.3, 1, 0.7, 1), top 0.9s cubic-bezier(0.7, 0, 0.3, 1), transform 0.9s cubic-bezier(0.5, 0, 0.2, 1), stroke 0.9s ease';
+  // 6. Animate the EXACT SAME arrow traveling to the center
+  btnArrow.style.transition = 'left 0.7s cubic-bezier(0.5, 0, 0.2, 1), top 0.7s cubic-bezier(0.5, 0, 0.2, 1), transform 0.7s cubic-bezier(0.5, 0, 0.2, 1), stroke 0.7s ease';
   
   btnArrow.style.left = '50%';
   btnArrow.style.top = '50%';
   btnArrow.style.transform = 'translate(-50%, -50%) scale(2.5)'; // Scale up to loader size
-  btnArrow.style.stroke = 'var(--accent)'; // Turn blue
-  
-  // While traveling, morph the arrow shape into a circle loader!
-  document.getElementById('arrowShape').style.opacity = '0';
-  document.getElementById('arrowShape').style.transform = 'scale(0.5)'; // Shrink arrow lines
-  
-  document.getElementById('circleShape').style.opacity = '1';
-  document.getElementById('circleShape').style.strokeDashoffset = '0'; // Draw the circle!
   
   // Hide position layout flow immediately after animation starts
   setTimeout(() => {
     inputSec.style.position = 'absolute';
   }, 400);
   
-  // 7. Once it reaches the center, start spinning the SVG!
+  // Wait for the arrow to hit the center, THEN morph it into a circle loader!
   setTimeout(() => {
-    btnArrow.classList.add('spinning-loader');
-    document.getElementById('loaderText').classList.add('active');
-  }, 900);
+    btnArrow.style.stroke = 'var(--accent)'; // Turn blue when it morphs
+    document.getElementById('arrowShape').style.opacity = '0';
+    document.getElementById('arrowShape').style.transform = 'scale(0.5)'; // Shrink arrow lines
+    
+    document.getElementById('circleShape').style.opacity = '1';
+    document.getElementById('circleShape').style.strokeDashoffset = '0'; // Draw the circle!
+    
+    // 7. Wait for morph to finish, then start spinning the SVG!
+    setTimeout(() => {
+      btnArrow.classList.add('spinning-loader');
+      document.getElementById('loaderText').classList.add('active');
+    }, 400);
+  }, 700); // 700ms flight time
+
   
   try {
     const res = await fetch('/api/detect', {
@@ -673,7 +684,8 @@ function renderResults(data) {
   void resSec.offsetWidth;
   resSec.classList.add('visible');
   
-  const pct = data.overall_similarity;
+  // The overall_similarity from backend is 0.0 to 1.0! Convert to percentage.
+  const pct = data.overall_similarity * 100;
   
   let color = 'var(--success)';
   let gradient = 'linear-gradient(135deg, #34c759, #30b0c7)'; 
