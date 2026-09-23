@@ -43,6 +43,7 @@ class PlagiarismReport:
     source_sections: List[Section]
     suspect_sections: List[Section]
     verdict: str
+    ai_probability_score: float = 0.0
     details: Dict = field(default_factory=dict)
 
     def to_markdown(self) -> str:
@@ -142,6 +143,32 @@ class SemanticPlagiarismDetector:
         self.similarity_threshold = similarity_threshold
         self.paraphrase_threshold = paraphrase_threshold
         self.min_section_words = min_section_words
+
+    def _calculate_ai_probability(self, text: str) -> float:
+        """
+        Heuristic for AI Content Detection.
+        AI generated text often has low variance in sentence length (low burstiness).
+        This is a lightweight mathematical proxy for demonstration.
+        """
+        import math
+        if not text.strip(): return 0.0
+        
+        sentences = [s.strip() for s in text.replace('!', '.').replace('?', '.').split('.') if len(s.strip()) > 5]
+        if len(sentences) < 3:
+            return 30.0 # Not enough data
+            
+        lengths = [len(s.split()) for s in sentences]
+        mean_len = sum(lengths) / len(lengths)
+        variance = sum((x - mean_len) ** 2 for x in lengths) / len(lengths)
+        std_dev = math.sqrt(variance)
+        
+        cv = std_dev / mean_len if mean_len > 0 else 0
+        ai_prob = max(0.0, min(100.0, 100 - (cv - 0.2) * 200))
+        
+        if mean_len < 10:
+            ai_prob *= 0.6
+            
+        return round(ai_prob, 1)
 
     # ------------------------------------------------------------------
     # 1. Document / text processing
@@ -263,7 +290,6 @@ class SemanticPlagiarismDetector:
 
         overall = min(100.0, max(0.0, overall))
 
-        # Verdict
         if overall >= 55:
             verdict = "HIGH RISK of semantic plagiarism"
         elif overall >= 35:
@@ -273,12 +299,15 @@ class SemanticPlagiarismDetector:
         else:
             verdict = "No significant semantic plagiarism detected"
 
+        ai_prob = self._calculate_ai_probability(suspect_text)
+
         return PlagiarismReport(
             overall_similarity=round(overall, 1),
             matched_pairs=matches,
             source_sections=source_secs,
             suspect_sections=suspect_secs,
             verdict=verdict,
+            ai_probability_score=ai_prob,
             details={
                 "threshold": self.similarity_threshold,
                 "paraphrase_threshold": self.paraphrase_threshold,

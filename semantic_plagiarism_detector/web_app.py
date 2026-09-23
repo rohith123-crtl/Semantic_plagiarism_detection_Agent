@@ -12,9 +12,24 @@ import json
 import sys
 import threading
 import webbrowser
+import base64
+import io
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 import numpy as np
+
+# Optional document parsing libraries
+try:
+    from pypdf import PdfReader
+    HAS_PYPDF = True
+except ImportError:
+    HAS_PYPDF = False
+
+try:
+    import docx
+    HAS_DOCX = True
+except ImportError:
+    HAS_DOCX = False
 
 # Ensure UTF-8 output on Windows consoles
 if sys.platform == "win32":
@@ -41,7 +56,7 @@ DETECTOR = SemanticPlagiarismDetector(
 )
 
 # ---------------------------------------------------------------------------
-# HTML UI (Immersive Textures, Glassmorphism, Cinematic Transitions)
+# HTML UI (File Uploads, Highlighting, Analytics, AI Detection)
 # ---------------------------------------------------------------------------
 HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -49,6 +64,7 @@ HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Semantic Plagiarism Detector</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
   :root {
     --apple-ease: cubic-bezier(0.25, 1, 0.3, 1);
@@ -67,6 +83,7 @@ HTML = r"""<!DOCTYPE html>
     --danger: #ff3b30;
     --warning: #ff9500;
     --success: #34c759;
+    --ai-color: #9d4edd;
   }
   
   :root.dark {
@@ -79,17 +96,15 @@ HTML = r"""<!DOCTYPE html>
     --mesh-opacity: 0.15;
     --input-bg: rgba(0, 0, 0, 0.3);
     --accent: #2997ff;
+    --ai-color: #c77dff;
   }
   
   * { box-sizing: border-box; margin: 0; padding: 0; }
   
   body {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, sans-serif;
-    color: var(--text-main);
-    min-height: 100vh;
-    overflow-x: hidden;
-    -webkit-font-smoothing: antialiased;
-    background: var(--bg-color);
+    color: var(--text-main); min-height: 100vh; overflow-x: hidden;
+    -webkit-font-smoothing: antialiased; background: var(--bg-color);
     transition: background-color 0.6s var(--apple-ease), color 0.6s var(--apple-ease);
   }
 
@@ -103,19 +118,14 @@ HTML = r"""<!DOCTYPE html>
       radial-gradient(circle at 20% 80%, rgba(255, 219, 182, 1) 0%, transparent 40%);
     opacity: var(--mesh-opacity);
     animation: meshFlow 20s infinite alternate linear;
-    z-index: -2;
-    transition: opacity 0.6s var(--apple-ease);
+    z-index: -2; transition: opacity 0.6s var(--apple-ease);
   }
-  @keyframes meshFlow {
-    0% { transform: rotate(0deg) scale(1); }
-    100% { transform: rotate(20deg) scale(1.2); }
-  }
+  @keyframes meshFlow { 0% { transform: rotate(0deg) scale(1); } 100% { transform: rotate(20deg) scale(1.2); } }
 
-  /* Top Navigation */
+  /* Navigation */
   .navbar {
     position: fixed; top: 0; width: 100%; padding: 1.2rem 2.5rem;
-    display: flex; justify-content: space-between; align-items: center;
-    z-index: 100;
+    display: flex; justify-content: space-between; align-items: center; z-index: 100;
   }
   .nav-left { display: flex; align-items: center; gap: 1.5rem; }
   .nav-logo {
@@ -124,13 +134,10 @@ HTML = r"""<!DOCTYPE html>
     background: linear-gradient(135deg, var(--text-main), var(--text-sec));
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
-  .nav-link {
-    font-size: 0.9rem; font-weight: 600; color: var(--text-sec); cursor: pointer;
-    transition: color 0.3s; display: flex; align-items: center; gap: 0.4rem;
-  }
+  .nav-link { font-size: 0.9rem; font-weight: 600; color: var(--text-sec); cursor: pointer; transition: color 0.3s; display: flex; align-items: center; gap: 0.4rem; }
   .nav-link:hover { color: var(--text-main); }
   
-  /* iOS Style Theme Toggle */
+  /* Theme Toggle */
   .theme-switch-wrapper { display: flex; align-items: center; gap: 12px; }
   .theme-icon { color: var(--text-sec); transition: color 0.4s; }
   .theme-switch { position: relative; display: inline-block; width: 56px; height: 32px; }
@@ -164,24 +171,18 @@ HTML = r"""<!DOCTYPE html>
   p.subtitle { font-size: 1.1rem; color: var(--text-sec); text-align: center; margin-bottom: 3rem; transition: color 0.6s; }
 
   /* Layout */
-  .container { max-width: 1100px; margin: 0 auto; padding: 7rem 2rem 4rem; display: flex; flex-direction: column; align-items: center; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 7rem 2rem 4rem; display: flex; flex-direction: column; align-items: center; }
   
   /* Cinematic Transition Container */
-  .input-section { width: 100%; transition: all 0.9s cubic-bezier(0.68, -0.15, 0.26, 1.15); transform-origin: center center; }
-  
-  /* The "Pull Away" animation */
-  .input-section.pulled-away {
-    opacity: 0; transform: scale(0.7) translateY(-40px); filter: blur(15px); pointer-events: none; position: absolute;
-  }
+  .input-section { width: 100%; transition: all 0.8s var(--apple-ease); transform-origin: center top; }
+  .input-section.hidden { opacity: 0; transform: scale(0.9) translateY(-20px); filter: blur(10px); pointer-events: none; position: absolute; }
 
-  /* Glassmorphism Cards */
+  /* Glassmorphism Cards with Noise Texture */
   .glass {
-    position: relative;
-    background: var(--glass-bg);
+    position: relative; background: var(--glass-bg);
     backdrop-filter: blur(30px) saturate(200%); -webkit-backdrop-filter: blur(30px) saturate(200%);
     border: 1px solid var(--glass-border); border-radius: 20px; box-shadow: var(--glass-shadow);
-    transition: background 0.6s, border-color 0.6s, box-shadow 0.6s;
-    overflow: hidden;
+    transition: background 0.6s, border-color 0.6s, box-shadow 0.6s; overflow: hidden;
   }
   .glass::before {
     content: ""; position: absolute; inset: 0; border-radius: inherit;
@@ -197,54 +198,62 @@ HTML = r"""<!DOCTYPE html>
   .editor-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,0,0,0.15); }
   
   .card-header { display: flex; justify-content: space-between; align-items: center; padding: 0 0.25rem; }
-  .card-title { font-size: 0.95rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text-main); transition: color 0.6s; }
+  .card-title { font-size: 0.95rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text-main); transition: color 0.6s; display: flex; align-items: center; gap: 0.5rem; }
   .word-count { font-size: 0.8rem; color: var(--text-sec); font-variant-numeric: tabular-nums; transition: color 0.6s; font-weight: 500; }
   
-  textarea {
-    width: 100%; height: 250px;
+  /* File Upload Overlays */
+  .file-upload-btn {
+    font-size: 0.8rem; padding: 0.3rem 0.8rem; border-radius: 999px; background: var(--glass-bg); border: 1px solid var(--glass-border);
+    cursor: pointer; color: var(--text-main); font-weight: 600; display: flex; align-items: center; gap: 0.4rem; transition: all 0.3s;
+  }
+  .file-upload-btn:hover { background: var(--text-main); color: var(--bg-color); }
+  .hidden-input { display: none; }
+  
+  /* Textareas & Highlighting Output */
+  .text-container { position: relative; width: 100%; height: 250px; }
+  textarea, .highlight-output {
+    position: absolute; inset: 0; width: 100%; height: 100%;
     background: var(--input-bg); border: 1px solid var(--glass-border); border-radius: 12px;
     padding: 1.25rem; font-family: inherit; font-size: 0.95rem; line-height: 1.6;
-    color: var(--text-main); resize: none;
+    color: var(--text-main); resize: none; overflow-y: auto;
     transition: all 0.4s var(--apple-ease);
   }
   textarea:focus { outline: none; background: var(--glass-bg); border-color: var(--accent); box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.2); }
+  .highlight-output { display: none; }
+  
+  /* Highlighter marks */
+  mark.direct-match { background: rgba(255, 59, 48, 0.2); border-bottom: 2px solid var(--danger); color: inherit; padding: 0.1em; border-radius: 4px; }
+  mark.para-match { background: rgba(255, 149, 0, 0.2); border-bottom: 2px solid var(--warning); color: inherit; padding: 0.1em; border-radius: 4px; }
   
   /* Buttons */
-  .actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; position: relative; z-index: 10; }
-  
+  .actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; position: relative; z-index: 10; margin-top: 1rem;}
   button {
-    font-family: inherit; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em;
-    padding: 0.75rem 1.5rem; border-radius: 999px; border: none; cursor: pointer;
+    font-family: inherit; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; padding: 0.75rem 1.5rem; border-radius: 999px; border: none; cursor: pointer;
     transition: transform 0.3s var(--bounce-ease), background 0.4s, box-shadow 0.4s, color 0.4s, border-color 0.4s;
     display: flex; align-items: center; gap: 0.5rem; color: var(--text-main);
   }
   button:active { transform: scale(0.92); }
-  
-  .btn-primary { background: linear-gradient(135deg, var(--text-main), #555); color: var(--bg-color); box-shadow: 0 8px 20px rgba(0,0,0,0.2); padding: 0.8rem 2.5rem; font-size: 1.05rem; }
+  .btn-primary { background: linear-gradient(135deg, var(--text-main), #555); color: var(--bg-color); box-shadow: 0 8px 20px rgba(0,0,0,0.2); padding: 0.8rem 2rem; font-size: 1.05rem; }
   .dark .btn-primary { background: linear-gradient(135deg, #fff, #bbb); color: #000; }
   .btn-primary:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 12px 28px rgba(0,0,0,0.25); }
-  
-  .btn-secondary { background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
+  .btn-secondary { background: var(--glass-bg); backdrop-filter: blur(20px); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
   .btn-secondary:hover { transform: translateY(-2px); background: var(--glass-border); }
 
-  /* The physical spinning loader animation */
-  @keyframes circular-loading {
-    0% { transform: translate(-50%, -50%) scale(2.5) rotate(0deg); }
-    100% { transform: translate(-50%, -50%) scale(2.5) rotate(360deg); }
+  /* Loader */
+  .loader-container {
+    position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; justify-content: center; align-items: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.5s var(--apple-ease);
   }
-  .spinning-loader {
-    animation: circular-loading 1s cubic-bezier(0.68, -0.55, 0.26, 1.55) infinite !important;
+  .loader-container.active { opacity: 1; pointer-events: all; }
+  .spinner-3d {
+    width: 60px; height: 60px; border-radius: 50%; border: 4px solid transparent; border-top-color: var(--accent); border-right-color: var(--accent);
+    animation: spin3D 1s cubic-bezier(0.68, -0.55, 0.26, 1.55) infinite; margin-bottom: 1.5rem;
   }
-  
-  .loader-text { 
-    font-size: 1.2rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--text-main); 
-    opacity: 0; position: fixed; top: calc(50% + 50px); left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 50;
-    transition: opacity 0.4s;
-  }
-  .loader-text.active { opacity: 1; animation: pulse 1.5s infinite; }
+  @keyframes spin3D { 0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); } 100% { transform: rotateX(180deg) rotateY(360deg) rotateZ(360deg); } }
+  .loader-text { font-size: 1.2rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--text-main); animation: pulse 1.5s infinite; transition: color 0.6s; }
   @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-  
-  /* Results */
+
+  /* Results (Creative Entrance) */
   .results-section {
     width: 100%; display: none; flex-direction: column; gap: 2rem;
     opacity: 0; transform: perspective(1000px) rotateX(-10deg) translateY(60px) scale(0.95);
@@ -252,10 +261,11 @@ HTML = r"""<!DOCTYPE html>
   }
   .results-section.visible { display: flex; opacity: 1; transform: perspective(1000px) rotateX(0deg) translateY(0) scale(1); }
   
-  .score-panel { padding: 3rem; display: flex; align-items: center; justify-content: center; gap: 4rem; }
-  @media (max-width: 700px) { .score-panel { flex-direction: column; gap: 2rem; text-align: center; } }
+  .score-panel { padding: 2rem 3rem; display: flex; align-items: stretch; justify-content: space-between; gap: 2rem; flex-wrap: wrap; }
+  @media (max-width: 900px) { .score-panel { flex-direction: column; align-items: center; text-align: center; } }
   
-  .gauge-container { position: relative; width: 180px; height: 180px; }
+  /* Gauges & Info */
+  .gauge-container { position: relative; width: 180px; height: 180px; flex-shrink: 0;}
   .gauge-svg { transform: rotate(-90deg); width: 100%; height: 100%; overflow: visible; }
   .gauge-bg { fill: none; stroke: var(--glass-border); stroke-width: 14; stroke-linecap: round; transition: stroke 0.6s; }
   .gauge-fg {
@@ -264,33 +274,52 @@ HTML = r"""<!DOCTYPE html>
     transition: stroke-dashoffset 1.5s var(--bounce-ease), stroke 0.5s;
     filter: drop-shadow(0 4px 16px rgba(0,0,0,0.25));
   }
-  
   .gauge-val { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; text-align: center; }
-  #scoreValStr { font-size: 2.8rem; font-weight: 800; letter-spacing: -0.04em; background: linear-gradient(135deg, var(--text-main), var(--text-sec)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+  #scoreValStr {
+    font-size: 2.8rem; font-weight: 800; letter-spacing: -0.04em;
+    background: linear-gradient(135deg, var(--text-main), var(--text-sec)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  }
   .gauge-pct { font-size: 1.4rem; font-weight: 700; margin-left: 2px; background: inherit; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
   
-  .verdict-info h3 { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.04em; background: linear-gradient(135deg, var(--text-main), var(--text-sec)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-  .verdict-info p { max-width: 400px; margin-bottom: 2rem; color: var(--text-sec); transition: color 0.6s; font-weight: 500; }
+  /* AI Detector Badge */
+  .ai-badge {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 120px; height: 120px; border-radius: 50%; border: 2px solid var(--ai-color); background: rgba(157, 78, 221, 0.05); margin: auto;
+  }
+  .ai-score { font-size: 1.8rem; font-weight: 800; color: var(--ai-color); letter-spacing: -0.02em; }
+  .ai-lbl { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-sec); text-align: center; margin-top: 4px; }
   
-  .stats { display: flex; gap: 2.5rem; }
+  /* Analytics Chart */
+  .chart-container { width: 200px; height: 200px; position: relative; flex-shrink: 0; }
+  
+  .verdict-info { flex: 1; min-width: 250px; display: flex; flex-direction: column; justify-content: center; }
+  .verdict-info h3 { font-size: 2.2rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.04em; background: linear-gradient(135deg, var(--text-main), var(--text-sec)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .verdict-info p { margin-bottom: 1.5rem; color: var(--text-sec); font-weight: 500; font-size: 1rem; line-height: 1.5; }
+  
+  .stats { display: flex; gap: 2rem; flex-wrap: wrap; }
   @media (max-width: 700px) { .stats { justify-content: center; } }
-  .stat-val { font-size: 1.8rem; font-weight: 800; color: var(--text-main); transition: color 0.6s; letter-spacing: -0.02em; }
-  .stat-lbl { font-size: 0.75rem; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; transition: color 0.6s; }
+  .stat-val { font-size: 1.8rem; font-weight: 800; color: var(--text-main); letter-spacing: -0.02em; }
+  .stat-lbl { font-size: 0.75rem; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
   
-  .match-card { padding: 1.5rem; margin-bottom: 1.5rem; opacity: 0; transform: perspective(1000px) rotateX(15deg) translateY(30px); transition: all 0.7s var(--bounce-ease), background 0.6s, border 0.6s; }
+  /* Matches */
+  .match-card {
+    padding: 1.5rem; margin-bottom: 1.5rem; opacity: 0; transform: perspective(1000px) rotateX(15deg) translateY(30px);
+    transition: all 0.7s var(--bounce-ease), background 0.6s, border 0.6s;
+  }
   .match-card.show { opacity: 1; transform: perspective(1000px) rotateX(0deg) translateY(0); }
   .match-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; }
   .match-badge { padding: 0.4rem 1rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
   .badge-high { background: rgba(255,59,48,0.15); color: var(--danger); border: 1px solid rgba(255,59,48,0.2); }
   .badge-para { background: rgba(255,149,0,0.15); color: var(--warning); border: 1px solid rgba(255,149,0,0.2); }
   .match-score { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; background: linear-gradient(135deg, var(--text-main), var(--text-sec)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  
   .match-content { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
   @media (max-width: 700px) { .match-content { grid-template-columns: 1fr; } }
-  .match-col { background: var(--input-bg); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--glass-border); transition: background 0.6s, border 0.6s; }
-  .col-lbl { font-size: 0.75rem; color: var(--text-sec); font-weight: 700; margin-bottom: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; transition: color 0.6s; }
-  .col-txt { font-size: 0.95rem; line-height: 1.6; color: var(--text-main); transition: color 0.6s; font-weight: 500; }
+  .match-col { background: var(--input-bg); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--glass-border); }
+  .col-lbl { font-size: 0.75rem; color: var(--text-sec); font-weight: 700; margin-bottom: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .col-txt { font-size: 0.95rem; line-height: 1.6; color: var(--text-main); font-weight: 500; }
 
-  /* Toast */
+  /* Toast & Modal */
   .toast {
     position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(100px) scale(0.9);
     background: var(--text-main); color: var(--bg-color); padding: 0.8rem 1.8rem; border-radius: 999px;
@@ -298,21 +327,23 @@ HTML = r"""<!DOCTYPE html>
   }
   .toast.show { transform: translateX(-50%) translateY(0) scale(1); }
 
-  /* Modal Styles */
   .modal-backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    z-index: 1000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.4s var(--apple-ease);
+    z-index: 1000; display: flex; justify-content: center; align-items: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.4s var(--apple-ease);
   }
   .modal-backdrop.active { opacity: 1; pointer-events: all; }
   .modal-card { width: 90%; max-width: 550px; padding: 2.5rem; text-align: left; transform: scale(0.9) translateY(20px); opacity: 0; transition: all 0.5s var(--bounce-ease); }
   .modal-backdrop.active .modal-card { transform: scale(1) translateY(0); opacity: 1; }
   .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
   .modal-header h2 { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
-  .close-btn { background: var(--glass-border); border: none; width: 32px; height: 32px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--text-main); transition: background 0.3s; padding: 0; }
+  .close-btn { 
+    background: var(--glass-border); border: none; width: 32px; height: 32px; border-radius: 50%;
+    display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--text-main); transition: background 0.3s; padding: 0;
+  }
   .close-btn:hover { background: var(--text-sec); color: var(--bg-color); }
   .modal-body p { margin-bottom: 1rem; line-height: 1.6; font-size: 0.95rem; font-weight: 500; }
   .modal-body ul { margin-bottom: 1.5rem; padding-left: 1.5rem; line-height: 1.6; font-size: 0.95rem; font-weight: 500; }
-  .modal-body li { margin-bottom: 0.5rem; }
 </style>
 </head>
 <body>
@@ -337,6 +368,7 @@ HTML = r"""<!DOCTYPE html>
         <li><strong>Mosaic Plagiarism:</strong> Borrowing phrases from a source without quotation marks, or finding synonyms for the author’s language.</li>
       </ul>
       <p>Using advanced <em>sentence-transformers</em>, this tool analyzes the deep semantic meaning of your documents to catch plagiarism even when the exact words have been completely rewritten.</p>
+      <p><strong>AI Content Detection:</strong> We also calculate an AI Probability Score based on the statistical entropy and burstiness of the text.</p>
     </div>
   </div>
 </div>
@@ -360,7 +392,11 @@ HTML = r"""<!DOCTYPE html>
   </div>
 </nav>
 
-<div class="loader-text" id="loaderText">Analyzing</div>
+<div class="loader-container" id="loader">
+  <div class="spinner-3d"></div>
+  <div class="loader-text" id="loaderText">Analyzing</div>
+</div>
+
 <div class="toast" id="toast">Message</div>
 
 <div class="container">
@@ -372,34 +408,39 @@ HTML = r"""<!DOCTYPE html>
     <div class="editor-grid">
       <div class="glass editor-card">
         <div class="card-header">
-          <span class="card-title">Source Text</span>
+          <span class="card-title">Source Text
+            <button class="file-upload-btn" onclick="document.getElementById('srcFile').click()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> Upload File
+            </button>
+            <input type="file" id="srcFile" class="hidden-input" accept=".txt,.pdf,.docx" onchange="handleFileUpload(event, 'source')">
+          </span>
           <span class="word-count" id="srcCount">0 words</span>
         </div>
-        <textarea id="source" placeholder="Enter original reference text..."></textarea>
+        <div class="text-container">
+          <textarea id="source" placeholder="Enter original reference text or upload a PDF/DOCX..."></textarea>
+          <div id="srcHighlight" class="highlight-output"></div>
+        </div>
       </div>
       
       <div class="glass editor-card">
         <div class="card-header">
-          <span class="card-title">Suspect Text</span>
+          <span class="card-title">Suspect Text
+            <button class="file-upload-btn" onclick="document.getElementById('susFile').click()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> Upload File
+            </button>
+            <input type="file" id="susFile" class="hidden-input" accept=".txt,.pdf,.docx" onchange="handleFileUpload(event, 'suspect')">
+          </span>
           <span class="word-count" id="susCount">0 words</span>
         </div>
-        <textarea id="suspect" placeholder="Enter suspect document text..."></textarea>
+        <div class="text-container">
+          <textarea id="suspect" placeholder="Enter suspect document text or upload a PDF/DOCX..."></textarea>
+          <div id="susHighlight" class="highlight-output"></div>
+        </div>
       </div>
     </div>
     
     <div class="actions">
-      <!-- The button with the arrow that morphs into a circle physically -->
-      <button class="btn-primary" id="analyzeBtn" onclick="runAnalysis(event)">
-        Analyze
-        <!-- This exact SVG element transforms! -->
-        <svg id="btnArrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 8px; overflow: visible; transition: stroke 0.9s ease;">
-          <g id="arrowShape" style="transition: all 0.5s cubic-bezier(0.3, 1, 0.7, 1); transform-origin: center;">
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-            <polyline points="12 5 19 12 12 19"></polyline>
-          </g>
-          <circle id="circleShape" cx="12" cy="12" r="10" style="opacity: 0; stroke-dasharray: 65; stroke-dashoffset: 65; transition: all 0.6s cubic-bezier(0.5, 0, 0.2, 1); transform-origin: center;"></circle>
-        </svg>
-      </button>
+      <button class="btn-primary" onclick="runAnalysis()">Analyze Documents</button>
       <button class="btn-secondary" onclick="loadSample('para')">Demo: Paraphrase</button>
       <button class="btn-secondary" onclick="loadSample('light')">Demo: Light Edit</button>
       <button class="btn-secondary" onclick="loadSample('diff')">Demo: Unrelated</button>
@@ -408,13 +449,13 @@ HTML = r"""<!DOCTYPE html>
   
   <div class="results-section" id="resultsSection">
     <div class="actions" style="margin-bottom: 0;">
-      <!-- This triggers the precise return flight animation -->
       <button class="btn-secondary" onclick="resetView()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back to Editor
       </button>
     </div>
 
     <div class="glass score-panel">
+      <!-- Main Gauge -->
       <div class="gauge-container">
         <svg class="gauge-svg" viewBox="0 0 200 200">
           <circle class="gauge-bg" cx="100" cy="100" r="80"></circle>
@@ -425,6 +466,12 @@ HTML = r"""<!DOCTYPE html>
         </div>
       </div>
       
+      <!-- Chart.js Analytics Dashboard -->
+      <div class="chart-container">
+        <canvas id="analyticsChart"></canvas>
+      </div>
+
+      <!-- Verdict & Stats -->
       <div class="verdict-info">
         <h3 id="verdictTitle">--</h3>
         <p id="verdictDesc">--</p>
@@ -433,6 +480,12 @@ HTML = r"""<!DOCTYPE html>
           <div><div class="stat-val" id="statSrc">0</div><div class="stat-lbl">Src Sec</div></div>
           <div><div class="stat-val" id="statSus">0</div><div class="stat-lbl">Sus Sec</div></div>
         </div>
+      </div>
+
+      <!-- AI Detection Badge -->
+      <div class="ai-badge" title="Probability that the suspect text is AI generated based on statistical entropy and burstiness">
+        <div class="ai-score" id="aiScore">0%</div>
+        <div class="ai-lbl">AI Generated<br>Probability</div>
       </div>
     </div>
     
@@ -451,11 +504,14 @@ function toggleModal() { document.getElementById('aboutModal').classList.toggle(
 function closeModal(e) { if(e.target.id === 'aboutModal') toggleModal(); }
 
 // Theme Toggle
-function toggleTheme() { document.documentElement.classList.toggle('dark'); }
+function toggleTheme() { document.documentElement.classList.toggle('dark'); updateChartTheme(); }
 if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) { 
   document.getElementById('checkbox').checked = true;
   document.documentElement.classList.add('dark');
 }
+
+// Chart.js instance
+let myChart = null;
 
 const samples = {
   para: {
@@ -476,10 +532,12 @@ let lastReport = null;
 
 const sourceEl = document.getElementById('source');
 const suspectEl = document.getElementById('suspect');
+const srcHigh = document.getElementById('srcHighlight');
+const susHigh = document.getElementById('susHighlight');
 const inputSec = document.getElementById('inputSection');
 const resSec = document.getElementById('resultsSection');
-const btnArrow = document.getElementById('btnArrow');
-const analyzeBtn = document.getElementById('analyzeBtn');
+const loader = document.getElementById('loader');
+const loaderText = document.getElementById('loaderText');
 
 sourceEl.addEventListener('input', () => updateCount('source', 'srcCount'));
 suspectEl.addEventListener('input', () => updateCount('suspect', 'susCount'));
@@ -502,148 +560,108 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// ----------------------------------------------------------------------
-// Perfect Return Flight Animation (From loading spinner back into the button)
-// ----------------------------------------------------------------------
-function resetView() {
-  // Hide results
-  resSec.classList.remove('visible');
+// File Upload Logic
+async function handleFileUpload(event, targetId) {
+  const file = event.target.files[0];
+  if (!file) return;
   
-  // 1. Arrow un-hides in the center of the screen
-  btnArrow.style.transition = 'opacity 0.2s ease, stroke 0.6s ease';
-  btnArrow.style.opacity = '1';
+  loaderText.textContent = "Parsing File";
+  loader.classList.add('active');
   
-  // 2. Morph the shapes inside the SVG back into an arrow!
-  document.getElementById('circleShape').style.opacity = '0';
-  document.getElementById('circleShape').style.strokeDashoffset = '65'; // Undraw the circle
-  document.getElementById('arrowShape').style.opacity = '1';
-  document.getElementById('arrowShape').style.transform = 'scale(1)'; // Bring arrow lines back
-  btnArrow.classList.remove('spinning-loader'); // Stop the spinning
-  
-  // 3. Create a dummy placeholder in the button so we can measure the exact target coordinate
-  const dummy = document.createElement('div');
-  dummy.style.width = '18px';
-  dummy.style.height = '18px';
-  dummy.style.marginLeft = '8px';
-  dummy.style.display = 'inline-block';
-  analyzeBtn.appendChild(dummy);
-  
-  // 4. Instantly snap the editor section back to its normal layout position temporarily 
-  // to get the true destination coordinates of the button
-  inputSec.style.position = 'relative';
-  inputSec.style.transition = 'none';
-  inputSec.classList.remove('pulled-away');
-  
-  // 5. Measure exactly where the arrow needs to land!
-  const targetRect = dummy.getBoundingClientRect();
-  
-  // 6. Snap the editor section instantly back to the hidden 'pulled-away' state so the user doesn't see it
-  inputSec.classList.add('pulled-away');
-  
-  // Force browser layout reflow
-  void inputSec.offsetWidth;
-  
-  // 7. Now restore the smooth transition on the editor section and trigger it to animate in normally
-  inputSec.style.transition = 'all 0.9s cubic-bezier(0.68, -0.15, 0.26, 1.15)';
-  inputSec.classList.remove('pulled-away');
-  
-  // 8. Animate the L-Shape flight!
-  const btnStyle = window.getComputedStyle(analyzeBtn);
-  
-  // Phase 1: Go straight horizontally (Left) to align with the button's X coordinate!
-  btnArrow.style.transition = 'left 0.6s cubic-bezier(0.5, 0, 0.2, 1), transform 0.6s ease, stroke 0.6s ease';
-  btnArrow.style.left = targetRect.left + 'px'; // Move left
-  // Keep Y centered at 50% for now
-  btnArrow.style.transform = 'translate(0, -50%) scale(1)';
-  btnArrow.style.stroke = btnStyle.color;
-  
-  // Phase 2: Take a sharp turn down into the moving button as the page arrives
-  setTimeout(() => {
-    btnArrow.style.transition = 'top 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.4s ease'; // fast drop
-    btnArrow.style.top = targetRect.top + 'px';
-    // Remove the -50% Y translation so it perfectly aligns with top
-    btnArrow.style.transform = 'translate(0, 0) scale(1)';
-    
-    setTimeout(() => {
-      // 9. When the journey is over, seamlessly place the real SVG back inside the actual button DOM
-      btnArrow.style.transition = 'none';
-      btnArrow.style.position = 'static';
-      btnArrow.style.left = 'auto';
-      btnArrow.style.top = 'auto';
-      analyzeBtn.replaceChild(btnArrow, dummy); // Swap out the dummy
-      
-      // Hide results panel entirely
-      resSec.style.display = 'none';
-      
-      // reset gauge for next time
-      const fg = document.getElementById('gaugeFg');
-      fg.style.transition = 'none';
-      fg.style.strokeDashoffset = 502.65;
-    }, 450); // wait for drop to finish
-  }, 500); // start drop slightly before page fully lands
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const base64Data = e.target.result.split(',')[1];
+    try {
+      const res = await fetch('/api/parse_file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, data: base64Data })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to parse file');
+      }
+      const json = await res.json();
+      document.getElementById(targetId).value = json.text;
+      updateCount(targetId, targetId === 'source' ? 'srcCount' : 'susCount');
+      showToast('File extracted successfully');
+    } catch(err) {
+      showToast(err.message);
+    } finally {
+      loader.classList.remove('active');
+      event.target.value = ''; // reset input
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
-// ----------------------------------------------------------------------
-// Cinematic Arrow-Detach & Morph Sequence
-// ----------------------------------------------------------------------
-async function runAnalysis(event) {
+function resetView() {
+  resSec.classList.remove('visible');
+  
+  // Hide Highlights, show Textareas
+  srcHigh.style.display = 'none'; susHigh.style.display = 'none';
+  sourceEl.style.display = 'block'; suspectEl.style.display = 'block';
+  
+  setTimeout(() => {
+    resSec.style.display = 'none';
+    inputSec.style.position = 'relative';
+    inputSec.classList.remove('hidden');
+    // reset gauge
+    const fg = document.getElementById('gaugeFg');
+    fg.style.transition = 'none';
+    fg.style.strokeDashoffset = 502.65;
+  }, 600);
+}
+
+function animateVal(id, start, end, dur, suffix="") {
+  const el = document.getElementById(id);
+  let startT = null;
+  const step = (t) => {
+    if (!startT) startT = t;
+    const p = Math.min((t - startT) / dur, 1);
+    const ease = 1 - Math.pow(1 - p, 4);
+    const v = start + (end - start) * ease;
+    el.textContent = ((end % 1 !== 0) ? v.toFixed(1) : Math.round(v)) + suffix;
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// In-Text Highlighting Logic
+function applyHighlights(text, matches, isSource) {
+  let highlighted = escape(text);
+  
+  // Sort matches by length descending so we don't double replace substrings incorrectly
+  // A better approach is index-based replacement, but for this UI demo, string replacement works fine if careful.
+  matches.sort((a,b) => {
+    const tA = isSource ? a.source_text : a.suspect_text;
+    const tB = isSource ? b.source_text : b.suspect_text;
+    return tB.length - tA.length;
+  });
+
+  matches.forEach(m => {
+    const sectionText = isSource ? m.source_text : m.suspect_text;
+    const cls = m.is_paraphrase ? 'para-match' : 'direct-match';
+    const escapedSec = escape(sectionText);
+    
+    // Create the mark wrapper
+    const wrapped = `<mark class="${cls}">${escapedSec}</mark>`;
+    // Simple global replace (in a robust app, use character indices)
+    highlighted = highlighted.split(escapedSec).join(wrapped);
+  });
+  
+  // Convert newlines to br for rendering
+  return highlighted.replace(/\n/g, '<br>');
+}
+
+async function runAnalysis() {
   const src = sourceEl.value.trim();
   const sus = suspectEl.value.trim();
   if (!src || !sus) { showToast('Please enter both documents'); return; }
   
-  // 1. Get exact coordinates of the arrow *inside* the button
-  const rect = btnArrow.getBoundingClientRect();
-  
-  // 2. Detach the EXACT same physical SVG element and append it directly to the body
-  document.body.appendChild(btnArrow);
-  
-  // 3. Pin it exactly where it just was, with absolutely no visual jump
-  btnArrow.style.position = 'fixed';
-  btnArrow.style.left = rect.left + 'px';
-  btnArrow.style.top = rect.top + 'px';
-  btnArrow.style.width = rect.width + 'px';
-  btnArrow.style.height = rect.height + 'px';
-  btnArrow.style.margin = '0';
-  btnArrow.style.zIndex = '9999';
-  
-  // Keep the stroke color matching the button's text color perfectly
-  const btnStyle = window.getComputedStyle(analyzeBtn);
-  btnArrow.style.stroke = btnStyle.color;
-  
-  // 4. Force reflow to cement the position
-  void btnArrow.offsetWidth;
-  
-  // 5. Trigger the pull away animation for the inputs
-  inputSec.classList.add('pulled-away');
-  
-  // 6. Animate the EXACT SAME arrow traveling to the center
-  btnArrow.style.transition = 'left 0.7s cubic-bezier(0.5, 0, 0.2, 1), top 0.7s cubic-bezier(0.5, 0, 0.2, 1), transform 0.7s cubic-bezier(0.5, 0, 0.2, 1), stroke 0.7s ease';
-  
-  btnArrow.style.left = '50%';
-  btnArrow.style.top = '50%';
-  btnArrow.style.transform = 'translate(-50%, -50%) scale(2.5)'; // Scale up to loader size
-  
-  // Hide position layout flow immediately after animation starts
-  setTimeout(() => {
-    inputSec.style.position = 'absolute';
-  }, 400);
-  
-  // Wait for the arrow to hit the center, THEN morph it into a circle loader!
-  setTimeout(() => {
-    btnArrow.style.stroke = 'var(--accent)'; // Turn blue when it morphs
-    document.getElementById('arrowShape').style.opacity = '0';
-    document.getElementById('arrowShape').style.transform = 'scale(0.5)'; // Shrink arrow lines
-    
-    document.getElementById('circleShape').style.opacity = '1';
-    document.getElementById('circleShape').style.strokeDashoffset = '0'; // Draw the circle!
-    
-    // 7. Wait for morph to finish, then start spinning the SVG!
-    setTimeout(() => {
-      btnArrow.classList.add('spinning-loader');
-      document.getElementById('loaderText').classList.add('active');
-    }, 400);
-  }, 700); // 700ms flight time
-
+  inputSec.classList.add('hidden');
+  loaderText.textContent = "Analyzing";
+  setTimeout(() => { inputSec.style.position = 'absolute'; loader.classList.add('active'); }, 400);
   
   try {
     const res = await fetch('/api/detect', {
@@ -655,41 +673,29 @@ async function runAnalysis(event) {
     const data = await res.json();
     lastReport = data;
     
-    // Give the cinematic sequence enough time to play (min 2 seconds)
     setTimeout(() => {
-      // Fade out the spinning arrow before revealing results
-      btnArrow.style.transition = 'opacity 0.4s ease';
-      btnArrow.style.opacity = '0'; // Hide arrow for results view
-      document.getElementById('loaderText').classList.remove('active');
-      
-      setTimeout(() => {
-        // Arrow is now hidden, render results
-        renderResults(data);
-      }, 400);
-    }, 2000);
+      loader.classList.remove('active');
+      setTimeout(() => renderResults(data, src, sus), 400);
+    }, 800);
     
   } catch(e) {
-    document.getElementById('loaderText').classList.remove('active');
-    setTimeout(() => {
-      inputSec.style.position = 'relative';
-      inputSec.classList.remove('pulled-away');
-      resetView(); // puts arrow back perfectly
-      showToast(e.message);
-    }, 400);
+    loader.classList.remove('active');
+    setTimeout(() => { inputSec.style.position = 'relative'; inputSec.classList.remove('hidden'); showToast(e.message); }, 400);
   }
 }
 
-function renderResults(data) {
+function renderResults(data, srcText, susText) {
   resSec.style.display = 'flex';
-  void resSec.offsetWidth;
+  void resSec.offsetWidth; // trigger reflow
   resSec.classList.add('visible');
   
-  // The overall_similarity from backend is 0.0 to 1.0! Convert to percentage.
-  const pct = data.overall_similarity * 100;
+  const pct = data.overall_similarity;
   
+  // Dynamic Gradients
   let color = 'var(--success)';
   let gradient = 'linear-gradient(135deg, #34c759, #30b0c7)'; 
-  if (pct >= 55) { color = 'var(--danger)'; gradient = 'linear-gradient(135deg, #ff3b30, #ff9500)'; }
+  
+  if (pct >= 55) { color = 'var(--danger)'; gradient = 'linear-gradient(135deg, #ff3b30, #ff9500)'; } 
   else if (pct >= 35) { color = 'var(--warning)'; gradient = 'linear-gradient(135deg, #ff9500, #ffcc00)'; }
   
   const scoreValStr = document.getElementById('scoreValStr');
@@ -698,11 +704,10 @@ function renderResults(data) {
   scoreValStr.style.webkitTextFillColor = 'transparent';
   
   const vt = document.getElementById('verdictTitle');
-  vt.textContent = data.verdict;
-  vt.style.background = gradient;
-  vt.style.webkitBackgroundClip = 'text';
-  vt.style.webkitTextFillColor = 'transparent';
+  vt.textContent = data.verdict; vt.style.background = gradient;
+  vt.style.webkitBackgroundClip = 'text'; vt.style.webkitTextFillColor = 'transparent';
   
+  // Animate Gauges & Numbers
   const fg = document.getElementById('gaugeFg');
   fg.style.stroke = color;
   const offset = 502.65 - (pct / 100) * 502.65;
@@ -712,12 +717,23 @@ function renderResults(data) {
   animateVal('statMatches', 0, data.matches.length, 1200);
   animateVal('statSrc', 0, data.source_sections, 1200);
   animateVal('statSus', 0, data.suspect_sections, 1200);
+  animateVal('aiScore', 0, data.ai_probability_score, 1800, '%');
   
   document.getElementById('verdictDesc').textContent = 
     pct >= 55 ? 'High probability of plagiarism detected.' :
     pct >= 35 ? 'Moderate similarity found. Indicates paraphrasing or shared sources.' :
     'Low similarity. Documents appear original.';
     
+  // Chart.js Analytics Dashboard Update
+  updateChart(data);
+
+  // In-Text Highlighting
+  sourceEl.style.display = 'none'; suspectEl.style.display = 'none';
+  srcHigh.style.display = 'block'; susHigh.style.display = 'block';
+  srcHigh.innerHTML = applyHighlights(srcText, data.matches, true);
+  susHigh.innerHTML = applyHighlights(susText, data.matches, false);
+    
+  // Matches List
   const list = document.getElementById('matchList');
   list.innerHTML = '';
   
@@ -726,7 +742,6 @@ function renderResults(data) {
   } else {
     data.matches.forEach((m, i) => {
       const isPara = m.is_paraphrase;
-      const cColor = isPara ? 'var(--warning)' : 'var(--danger)';
       const cGrad = isPara ? 'linear-gradient(135deg, #ff9500, #ffcc00)' : 'linear-gradient(135deg, #ff3b30, #ff9500)';
       const bgClass = isPara ? 'badge-para' : 'badge-high';
       const label = isPara ? 'Paraphrased' : 'High Similarity';
@@ -741,19 +756,65 @@ function renderResults(data) {
           </span>
         </div>
         <div class="match-content">
-          <div class="match-col">
-            <div class="col-lbl">Source Document</div>
-            <div class="col-txt">${escape(m.source_text)}</div>
-          </div>
-          <div class="match-col">
-            <div class="col-lbl">Suspect Document</div>
-            <div class="col-txt">${escape(m.suspect_text)}</div>
-          </div>
+          <div class="match-col"><div class="col-lbl">Source Document</div><div class="col-txt">${escape(m.source_text)}</div></div>
+          <div class="match-col"><div class="col-lbl">Suspect Document</div><div class="col-txt">${escape(m.suspect_text)}</div></div>
         </div>
       `;
       list.appendChild(card);
       setTimeout(() => card.classList.add('show'), 200 * i + 400);
     });
+  }
+}
+
+// Chart.js Integration
+function updateChart(data) {
+  const ctx = document.getElementById('analyticsChart').getContext('2d');
+  
+  // Calculate distribution
+  let directMatches = data.matches.filter(m => !m.is_paraphrase).length;
+  let paraMatches = data.matches.filter(m => m.is_paraphrase).length;
+  let totalSuspect = data.suspect_sections;
+  let original = Math.max(0, totalSuspect - directMatches - paraMatches);
+  
+  // If nothing, show 100% original
+  if (totalSuspect === 0) original = 1;
+
+  const chartData = {
+    labels: ['Original Content', 'Paraphrased', 'Direct Match'],
+    datasets: [{
+      data: [original, paraMatches, directMatches],
+      backgroundColor: ['#34c759', '#ff9500', '#ff3b30'],
+      borderWidth: 0,
+      hoverOffset: 4
+    }]
+  };
+
+  const isDark = document.documentElement.classList.contains('dark');
+  const textColor = isDark ? '#a1a1aa' : '#86868b';
+
+  if (myChart) myChart.destroy();
+  
+  myChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: chartData,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '70%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: textColor, font: { family: '-apple-system', size: 10 } } },
+        tooltip: { callbacks: { label: function(context) { return ' ' + context.label + ': ' + context.raw + ' sections'; } } }
+      },
+      animation: { animateScale: true, animateRotate: true, duration: 1500, easing: 'easeOutQuart' }
+    }
+  });
+}
+
+function updateChartTheme() {
+  if (myChart) {
+    const isDark = document.documentElement.classList.contains('dark');
+    myChart.options.plugins.legend.labels.color = isDark ? '#a1a1aa' : '#86868b';
+    myChart.update();
   }
 }
 
@@ -769,6 +830,8 @@ function downloadReport(type) {
 
 window.addEventListener('DOMContentLoaded', () => loadSample('para'));
 </script>
+</body>
+</html>
 """
 
 # ---------------------------------------------------------------------------
@@ -828,41 +891,85 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
-        if self.path != "/api/detect":
-            self.send_error(404)
-            return
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-            source = payload.get("source", "").strip()
-            suspect = payload.get("suspect", "").strip()
-            if not source or not suspect:
-                self._json(400, {"error": "Both source and suspect texts are required"})
-                return
+        
+        # 1. FILE PARSING ENDPOINT
+        if self.path == "/api/parse_file":
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+                filename = payload.get("filename", "")
+                b64data = payload.get("data", "")
+                
+                if not b64data:
+                    self._json(400, {"error": "No file data received"})
+                    return
+                
+                file_bytes = base64.b64decode(b64data)
+                ext = filename.split(".")[-1].lower() if "." in filename else ""
+                
+                text = ""
+                if ext == "txt":
+                    text = file_bytes.decode("utf-8", errors="ignore")
+                elif ext == "pdf":
+                    if not HAS_PYPDF:
+                        self._json(500, {"error": "pypdf library not installed on server"})
+                        return
+                    pdf = PdfReader(io.BytesIO(file_bytes))
+                    for page in pdf.pages:
+                        text += page.extract_text() + "\n"
+                elif ext == "docx":
+                    if not HAS_DOCX:
+                        self._json(500, {"error": "python-docx library not installed on server"})
+                        return
+                    doc = docx.Document(io.BytesIO(file_bytes))
+                    for para in doc.paragraphs:
+                        text += para.text + "\n"
+                else:
+                    self._json(400, {"error": f"Unsupported file extension: .{ext}"})
+                    return
+                
+                self._json(200, {"text": text.strip()})
+            except Exception as e:
+                self._json(500, {"error": str(e)})
+            return
 
-            report = DETECTOR.detect(source, suspect)
+        # 2. DETECTION ENDPOINT
+        elif self.path == "/api/detect":
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+                source = payload.get("source", "").strip()
+                suspect = payload.get("suspect", "").strip()
+                if not source or not suspect:
+                    self._json(400, {"error": "Both source and suspect texts are required"})
+                    return
 
-            matches = []
-            for m in report.matched_pairs:
-                matches.append({
-                    "similarity": round(float(m.similarity), 4),
-                    "is_paraphrase": bool(m.is_paraphrase),
-                    "source_text": m.source_section.text,
-                    "suspect_text": m.suspect_section.text,
+                report = DETECTOR.detect(source, suspect)
+
+                matches = []
+                for m in report.matched_pairs:
+                    matches.append({
+                        "similarity": round(float(m.similarity), 4),
+                        "is_paraphrase": bool(m.is_paraphrase),
+                        "source_text": m.source_section.text,
+                        "suspect_text": m.suspect_section.text,
+                    })
+
+                self._json(200, {
+                    "overall_similarity": float(report.overall_similarity),
+                    "ai_probability_score": float(report.ai_probability_score),
+                    "verdict": report.verdict,
+                    "matches": matches,
+                    "source_sections": len(report.source_sections),
+                    "suspect_sections": len(report.suspect_sections),
+                    "html": report.to_html(),
+                    "markdown": report.to_markdown(),
                 })
-
-            self._json(200, {
-                "overall_similarity": float(report.overall_similarity),
-                "verdict": report.verdict,
-                "matches": matches,
-                "source_sections": len(report.source_sections),
-                "suspect_sections": len(report.suspect_sections),
-                "html": report.to_html(),
-                "markdown": report.to_markdown(),
-            })
-        except Exception as e:
-            self._json(500, {"error": str(e)})
+            except Exception as e:
+                self._json(500, {"error": str(e)})
+            return
+            
+        self.send_error(404)
 
 
 # ---------------------------------------------------------------------------
