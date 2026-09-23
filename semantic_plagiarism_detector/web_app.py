@@ -117,12 +117,18 @@ HTML = r"""<!DOCTYPE html>
     display: flex; justify-content: space-between; align-items: center;
     z-index: 100;
   }
+  .nav-left { display: flex; align-items: center; gap: 1.5rem; }
   .nav-logo {
     font-weight: 800; font-size: 1.4rem; letter-spacing: -0.04em;
     color: var(--text-main); transition: color 0.6s;
     background: linear-gradient(135deg, var(--text-main), var(--text-sec));
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
+  .nav-link {
+    font-size: 0.9rem; font-weight: 600; color: var(--text-sec); cursor: pointer;
+    transition: color 0.3s; display: flex; align-items: center; gap: 0.4rem;
+  }
+  .nav-link:hover { color: var(--text-main); }
   
   /* iOS Style Theme Toggle */
   .theme-switch-wrapper { display: flex; align-items: center; gap: 12px; }
@@ -333,14 +339,70 @@ HTML = r"""<!DOCTYPE html>
     font-weight: 600; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: all 0.5s var(--bounce-ease), background 0.6s, color 0.6s; z-index: 2000;
   }
   .toast.show { transform: translateX(-50%) translateY(0) scale(1); }
+
+  /* Modal Styles */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    z-index: 1000; display: flex; justify-content: center; align-items: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.4s var(--apple-ease);
+  }
+  .modal-backdrop.active { opacity: 1; pointer-events: all; }
+  
+  .modal-card {
+    width: 90%; max-width: 550px; padding: 2.5rem; text-align: left;
+    transform: scale(0.9) translateY(20px); opacity: 0; transition: all 0.5s var(--bounce-ease);
+  }
+  .modal-backdrop.active .modal-card { transform: scale(1) translateY(0); opacity: 1; }
+  
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+  .modal-header h2 { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
+  .close-btn { 
+    background: var(--glass-border); border: none; width: 32px; height: 32px; border-radius: 50%;
+    display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--text-main);
+    transition: background 0.3s; padding: 0;
+  }
+  .close-btn:hover { background: var(--text-sec); color: var(--bg-color); }
+  
+  .modal-body p { margin-bottom: 1rem; line-height: 1.6; font-size: 0.95rem; font-weight: 500; }
+  .modal-body ul { margin-bottom: 1.5rem; padding-left: 1.5rem; line-height: 1.6; font-size: 0.95rem; font-weight: 500; }
+  .modal-body li { margin-bottom: 0.5rem; }
 </style>
 </head>
 <body>
 
 <div class="bg-mesh"></div>
 
+<!-- What is Plagiarism Modal -->
+<div class="modal-backdrop" id="aboutModal" onclick="closeModal(event)">
+  <div class="glass modal-card" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>About Plagiarism</h2>
+      <button class="close-btn" onclick="toggleModal()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p><strong>Plagiarism</strong> is the representation of another author's language, thoughts, ideas, or expressions as one's own original work.</p>
+      
+      <p>Our Semantic Plagiarism Detector identifies several types of plagiarism:</p>
+      <ul>
+        <li><strong>Direct Plagiarism:</strong> Word-for-word transcription of a section of someone else’s work.</li>
+        <li><strong>Paraphrasing Plagiarism:</strong> Altering a few words or changing the sentence structure while maintaining the original meaning.</li>
+        <li><strong>Mosaic Plagiarism:</strong> Borrowing phrases from a source without quotation marks, or finding synonyms for the author’s language.</li>
+      </ul>
+      <p>Using advanced <em>sentence-transformers</em>, this tool analyzes the deep semantic meaning of your documents to catch plagiarism even when the exact words have been completely rewritten.</p>
+    </div>
+  </div>
+</div>
+
 <nav class="navbar">
-  <div class="nav-logo">SPD</div>
+  <div class="nav-left">
+    <div class="nav-logo">SPD</div>
+    <div class="nav-link" onclick="toggleModal()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+      What is Plagiarism?
+    </div>
+  </div>
   
   <div class="theme-switch-wrapper">
     <svg class="theme-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
@@ -430,6 +492,14 @@ HTML = r"""<!DOCTYPE html>
 </div>
 
 <script>
+// Modal Logic
+function toggleModal() {
+  document.getElementById('aboutModal').classList.toggle('active');
+}
+function closeModal(e) {
+  if(e.target.id === 'aboutModal') toggleModal();
+}
+
 // Sleek CSS-based Theme Toggle
 function toggleTheme() {
   document.documentElement.classList.toggle('dark');
