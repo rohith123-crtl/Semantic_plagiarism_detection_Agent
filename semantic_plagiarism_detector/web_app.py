@@ -54,10 +54,6 @@ HTML = r"""<!DOCTYPE html>
     --apple-ease: cubic-bezier(0.25, 1, 0.3, 1);
     --bounce-ease: cubic-bezier(0.34, 1.56, 0.64, 1);
     
-    /* Dynamic Arrow Start Pos */
-    --startX: 50%;
-    --startY: 50%;
-    
     /* Light Mode Defaults */
     --bg-color: #fbfbfd;
     --text-main: #1d1d1f;
@@ -178,7 +174,7 @@ HTML = r"""<!DOCTYPE html>
     opacity: 0; transform: scale(0.7) translateY(-40px); filter: blur(15px); pointer-events: none; position: absolute;
   }
 
-  /* Glassmorphism Cards with Immersive Noise Texture */
+  /* Glassmorphism Cards */
   .glass {
     position: relative;
     background: var(--glass-bg);
@@ -187,22 +183,17 @@ HTML = r"""<!DOCTYPE html>
     transition: background 0.6s, border-color 0.6s, box-shadow 0.6s;
     overflow: hidden;
   }
-  /* Grain Texture Overlay */
   .glass::before {
     content: ""; position: absolute; inset: 0; border-radius: inherit;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
     pointer-events: none; z-index: 0;
   }
-  /* Ensure content sits above the noise */
   .glass > * { position: relative; z-index: 1; }
 
   .editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; width: 100%; margin-bottom: 2.5rem; }
   @media (max-width: 800px) { .editor-grid { grid-template-columns: 1fr; } }
   
-  .editor-card {
-    padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;
-    transition: transform 0.4s var(--apple-ease), box-shadow 0.4s var(--apple-ease), background 0.6s, border 0.6s;
-  }
+  .editor-card { padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; transition: transform 0.4s var(--apple-ease), box-shadow 0.4s var(--apple-ease), background 0.6s, border 0.6s; }
   .editor-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,0,0,0.15); }
   
   .card-header { display: flex; justify-content: space-between; align-items: center; padding: 0 0.25rem; }
@@ -216,10 +207,7 @@ HTML = r"""<!DOCTYPE html>
     color: var(--text-main); resize: none;
     transition: all 0.4s var(--apple-ease);
   }
-  textarea:focus {
-    outline: none; background: var(--glass-bg); border-color: var(--accent);
-    box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.2);
-  }
+  textarea:focus { outline: none; background: var(--glass-bg); border-color: var(--accent); box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.2); }
   
   /* Buttons */
   .actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; position: relative; z-index: 10; }
@@ -232,80 +220,31 @@ HTML = r"""<!DOCTYPE html>
   }
   button:active { transform: scale(0.92); }
   
-  .btn-primary {
-    background: linear-gradient(135deg, var(--text-main), #555); color: var(--bg-color);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.2); padding: 0.8rem 2rem; font-size: 1.05rem;
-  }
+  .btn-primary { background: linear-gradient(135deg, var(--text-main), #555); color: var(--bg-color); box-shadow: 0 8px 20px rgba(0,0,0,0.2); padding: 0.8rem 2rem; font-size: 1.05rem; }
   .dark .btn-primary { background: linear-gradient(135deg, #fff, #bbb); color: #000; }
   .btn-primary:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 12px 28px rgba(0,0,0,0.25); }
   
-  #btnArrow { transition: opacity 0.2s; }
-  
-  .btn-secondary {
-    background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
-  }
+  .btn-secondary { background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
   .btn-secondary:hover { transform: translateY(-2px); background: var(--glass-border); }
 
-  /* Dynamic Arrow Detach & Loader Animation */
-  .loader-container {
-    position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; justify-content: center; align-items: center;
-    pointer-events: none; opacity: 1; /* Keep active to track arrow */
+  /* The Arrow morphs into the loader perfectly */
+  @keyframes circular-loading {
+    0% { transform: translate(-50%, -50%) scale(3) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) scale(3) rotate(360deg); }
   }
-  
-  .loader-animation-wrapper { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; display: flex; justify-content: center; align-items: center; }
-  
-  .loader-arrow {
-    position: fixed;
-    /* Intentionally no left/top here. It will be controlled by animation */
-    opacity: 0;
-    pointer-events: none;
-  }
-  
-  .loader-container.active .loader-arrow {
-    animation: arrowJourney 1.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  }
-  
-  @keyframes arrowJourney {
-    /* 0%: Arrow is perfectly over the button's arrow */
-    0% { left: var(--startX); top: var(--startY); opacity: 1; transform: translate(0, 0) scale(1) rotate(0deg); stroke: var(--bg-color); }
-    /* 20%: Arrow holds there while the input section gets "pulled away" */
-    20% { left: var(--startX); top: var(--startY); opacity: 1; transform: translate(0, 0) scale(1) rotate(0deg); stroke: var(--bg-color); }
-    /* 50%: Arrow moves to center and scales up */
-    50% { left: 50%; top: 50%; opacity: 1; transform: translate(-50%, -50%) scale(2) rotate(0deg); stroke: var(--accent); }
-    /* 70%: Arrow holds in center briefly */
-    70% { left: 50%; top: 50%; opacity: 1; transform: translate(-50%, -50%) scale(2) rotate(0deg); stroke: var(--accent); }
-    /* 100%: Arrow spins rapidly and disappears into the ring */
-    100% { left: 50%; top: 50%; opacity: 0; transform: translate(-50%, -50%) scale(0.2) rotate(720deg); stroke: var(--accent); }
-  }
-
-  .spinner-3d {
-    position: absolute; width: 100%; height: 100%; border-radius: 50%;
-    border: 4px solid transparent; border-top-color: var(--accent); border-right-color: var(--accent);
-    opacity: 0; transform: scale(0);
-  }
-  .loader-container.active .spinner-3d {
-    animation: ringPop 0.4s 1.1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, spin3D 1s 1.1s cubic-bezier(0.68, -0.55, 0.26, 1.55) infinite;
-  }
-  @keyframes ringPop {
-    from { opacity: 0; transform: scale(0); }
-    to { opacity: 1; transform: scale(1); }
-  }
-  @keyframes spin3D {
-    0% { transform: scale(1) rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
-    100% { transform: scale(1) rotateX(180deg) rotateY(360deg) rotateZ(360deg); }
+  .spinning-loader {
+    animation: circular-loading 1s cubic-bezier(0.68, -0.55, 0.26, 1.55) infinite !important;
   }
   
   .loader-text { 
     font-size: 1.2rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--text-main); 
-    opacity: 0; position: fixed; top: calc(50% + 60px); left: 50%; transform: translateX(-50%);
+    opacity: 0; position: fixed; top: calc(50% + 60px); left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 50;
+    transition: opacity 0.4s;
   }
-  .loader-container.active .loader-text {
-    animation: textFadeIn 0.4s 1.2s forwards, pulse 1.5s 1.6s infinite;
-  }
-  @keyframes textFadeIn { to { opacity: 1; } }
+  .loader-text.active { opacity: 1; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
   
-  /* Results (Creative Entrance) */
+  /* Results */
   .results-section {
     width: 100%; display: none; flex-direction: column; gap: 2rem;
     opacity: 0; transform: perspective(1000px) rotateX(-10deg) translateY(60px) scale(0.95);
@@ -326,29 +265,11 @@ HTML = r"""<!DOCTYPE html>
     filter: drop-shadow(0 4px 16px rgba(0,0,0,0.25));
   }
   
-  /* Textured Font for Percentage */
-  .gauge-val {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 100%; text-align: center;
-  }
-  #scoreValStr {
-    font-size: 2.8rem; font-weight: 800; letter-spacing: -0.04em;
-    /* This gradient will be overridden by JS for dynamic colors */
-    background: linear-gradient(135deg, var(--text-main), var(--text-sec));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    text-shadow: 0 4px 20px rgba(0,0,0,0.1);
-  }
-  .gauge-pct {
-    font-size: 1.4rem; font-weight: 700; margin-left: 2px;
-    background: inherit; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  }
+  .gauge-val { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; text-align: center; }
+  #scoreValStr { font-size: 2.8rem; font-weight: 800; letter-spacing: -0.04em; background: linear-gradient(135deg, var(--text-main), var(--text-sec)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+  .gauge-pct { font-size: 1.4rem; font-weight: 700; margin-left: 2px; background: inherit; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
   
-  /* Textured Verdict Title */
-  .verdict-info h3 { 
-    font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.04em; 
-    background: linear-gradient(135deg, var(--text-main), var(--text-sec));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  }
+  .verdict-info h3 { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.04em; background: linear-gradient(135deg, var(--text-main), var(--text-sec)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
   .verdict-info p { max-width: 400px; margin-bottom: 2rem; color: var(--text-sec); transition: color 0.6s; font-weight: 500; }
   
   .stats { display: flex; gap: 2.5rem; }
@@ -356,28 +277,15 @@ HTML = r"""<!DOCTYPE html>
   .stat-val { font-size: 1.8rem; font-weight: 800; color: var(--text-main); transition: color 0.6s; letter-spacing: -0.02em; }
   .stat-lbl { font-size: 0.75rem; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; transition: color 0.6s; }
   
-  /* Matches */
-  .match-card {
-    padding: 1.5rem; margin-bottom: 1.5rem;
-    opacity: 0; transform: perspective(1000px) rotateX(15deg) translateY(30px);
-    transition: all 0.7s var(--bounce-ease), background 0.6s, border 0.6s;
-  }
+  .match-card { padding: 1.5rem; margin-bottom: 1.5rem; opacity: 0; transform: perspective(1000px) rotateX(15deg) translateY(30px); transition: all 0.7s var(--bounce-ease), background 0.6s, border 0.6s; }
   .match-card.show { opacity: 1; transform: perspective(1000px) rotateX(0deg) translateY(0); }
-  
   .match-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; }
   .match-badge { padding: 0.4rem 1rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
   .badge-high { background: rgba(255,59,48,0.15); color: var(--danger); border: 1px solid rgba(255,59,48,0.2); }
   .badge-para { background: rgba(255,149,0,0.15); color: var(--warning); border: 1px solid rgba(255,149,0,0.2); }
-  
-  .match-score { 
-    font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em;
-    background: linear-gradient(135deg, var(--text-main), var(--text-sec));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  }
-  
+  .match-score { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; background: linear-gradient(135deg, var(--text-main), var(--text-sec)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
   .match-content { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
   @media (max-width: 700px) { .match-content { grid-template-columns: 1fr; } }
-  
   .match-col { background: var(--input-bg); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--glass-border); transition: background 0.6s, border 0.6s; }
   .col-lbl { font-size: 0.75rem; color: var(--text-sec); font-weight: 700; margin-bottom: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; transition: color 0.6s; }
   .col-txt { font-size: 0.95rem; line-height: 1.6; color: var(--text-main); transition: color 0.6s; font-weight: 500; }
@@ -393,26 +301,15 @@ HTML = r"""<!DOCTYPE html>
   /* Modal Styles */
   .modal-backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    z-index: 1000; display: flex; justify-content: center; align-items: center;
-    opacity: 0; pointer-events: none; transition: opacity 0.4s var(--apple-ease);
+    z-index: 1000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.4s var(--apple-ease);
   }
   .modal-backdrop.active { opacity: 1; pointer-events: all; }
-  
-  .modal-card {
-    width: 90%; max-width: 550px; padding: 2.5rem; text-align: left;
-    transform: scale(0.9) translateY(20px); opacity: 0; transition: all 0.5s var(--bounce-ease);
-  }
+  .modal-card { width: 90%; max-width: 550px; padding: 2.5rem; text-align: left; transform: scale(0.9) translateY(20px); opacity: 0; transition: all 0.5s var(--bounce-ease); }
   .modal-backdrop.active .modal-card { transform: scale(1) translateY(0); opacity: 1; }
-  
   .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
   .modal-header h2 { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
-  .close-btn { 
-    background: var(--glass-border); border: none; width: 32px; height: 32px; border-radius: 50%;
-    display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--text-main);
-    transition: background 0.3s; padding: 0;
-  }
+  .close-btn { background: var(--glass-border); border: none; width: 32px; height: 32px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--text-main); transition: background 0.3s; padding: 0; }
   .close-btn:hover { background: var(--text-sec); color: var(--bg-color); }
-  
   .modal-body p { margin-bottom: 1rem; line-height: 1.6; font-size: 0.95rem; font-weight: 500; }
   .modal-body ul { margin-bottom: 1.5rem; padding-left: 1.5rem; line-height: 1.6; font-size: 0.95rem; font-weight: 500; }
   .modal-body li { margin-bottom: 0.5rem; }
@@ -433,7 +330,6 @@ HTML = r"""<!DOCTYPE html>
     </div>
     <div class="modal-body">
       <p><strong>Plagiarism</strong> is the representation of another author's language, thoughts, ideas, or expressions as one's own original work.</p>
-      
       <p>Our Semantic Plagiarism Detector identifies several types of plagiarism:</p>
       <ul>
         <li><strong>Direct Plagiarism:</strong> Word-for-word transcription of a section of someone else’s work.</li>
@@ -464,19 +360,7 @@ HTML = r"""<!DOCTYPE html>
   </div>
 </nav>
 
-<div class="loader-container" id="loader">
-  <!-- Dynamic detached arrow -->
-  <svg class="loader-arrow" id="loaderArrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-    <line x1="5" y1="12" x2="19" y2="12"></line>
-    <polyline points="12 5 19 12 12 19"></polyline>
-  </svg>
-
-  <div class="loader-animation-wrapper">
-    <div class="spinner-3d"></div>
-  </div>
-  <div class="loader-text">Analyzing</div>
-</div>
-
+<div class="loader-text" id="loaderText">Analyzing</div>
 <div class="toast" id="toast">Message</div>
 
 <div class="container">
@@ -504,10 +388,11 @@ HTML = r"""<!DOCTYPE html>
     </div>
     
     <div class="actions">
-      <!-- The button with the arrow that gets "detached" -->
-      <button class="btn-primary" onclick="runAnalysis(event)">
+      <!-- The button with the arrow that gets physically extracted -->
+      <button class="btn-primary" id="analyzeBtn" onclick="runAnalysis(event)">
         Analyze Documents
-        <svg id="btnArrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px;">
+        <!-- This exact SVG element will leave the button and spin in the center -->
+        <svg id="btnArrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 8px;">
           <line x1="5" y1="12" x2="19" y2="12"></line>
           <polyline points="12 5 19 12 12 19"></polyline>
         </svg>
@@ -558,19 +443,11 @@ HTML = r"""<!DOCTYPE html>
 
 <script>
 // Modal Logic
-function toggleModal() {
-  document.getElementById('aboutModal').classList.toggle('active');
-}
-function closeModal(e) {
-  if(e.target.id === 'aboutModal') toggleModal();
-}
+function toggleModal() { document.getElementById('aboutModal').classList.toggle('active'); }
+function closeModal(e) { if(e.target.id === 'aboutModal') toggleModal(); }
 
-// Sleek CSS-based Theme Toggle
-function toggleTheme() {
-  document.documentElement.classList.toggle('dark');
-}
-
-// Check system pref
+// Theme Toggle
+function toggleTheme() { document.documentElement.classList.toggle('dark'); }
 if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) { 
   document.getElementById('checkbox').checked = true;
   document.documentElement.classList.add('dark');
@@ -597,8 +474,8 @@ const sourceEl = document.getElementById('source');
 const suspectEl = document.getElementById('suspect');
 const inputSec = document.getElementById('inputSection');
 const resSec = document.getElementById('resultsSection');
-const loader = document.getElementById('loader');
 const btnArrow = document.getElementById('btnArrow');
+const analyzeBtn = document.getElementById('analyzeBtn');
 
 sourceEl.addEventListener('input', () => updateCount('source', 'srcCount'));
 suspectEl.addEventListener('input', () => updateCount('suspect', 'susCount'));
@@ -623,11 +500,25 @@ function showToast(msg) {
 
 function resetView() {
   resSec.classList.remove('visible');
+  
   setTimeout(() => {
     resSec.style.display = 'none';
     inputSec.style.position = 'relative';
     inputSec.classList.remove('pulled-away');
-    btnArrow.style.opacity = '1'; // Restore the button arrow
+    
+    // Put the exact same arrow back into the button
+    btnArrow.classList.remove('spinning-loader');
+    btnArrow.style.transition = 'none';
+    btnArrow.style.transform = 'none';
+    btnArrow.style.position = 'static';
+    btnArrow.style.left = 'auto';
+    btnArrow.style.top = 'auto';
+    btnArrow.style.width = '18px';
+    btnArrow.style.height = '18px';
+    btnArrow.style.stroke = 'currentColor';
+    analyzeBtn.appendChild(btnArrow);
+    
+    document.getElementById('loaderText').classList.remove('active');
     
     // reset gauge
     const fg = document.getElementById('gaugeFg');
@@ -655,20 +546,50 @@ async function runAnalysis(event) {
   const sus = suspectEl.value.trim();
   if (!src || !sus) { showToast('Please enter both documents'); return; }
   
-  // Calculate exact screen coordinates of the arrow inside the button
+  // 1. Get exact coordinates of the arrow *inside* the button
   const rect = btnArrow.getBoundingClientRect();
-  document.documentElement.style.setProperty('--startX', rect.left + 'px');
-  document.documentElement.style.setProperty('--startY', rect.top + 'px');
   
-  // Detach arrow and trigger choreo
-  btnArrow.style.opacity = '0';
+  // 2. Detach the arrow and append it directly to the body so it floats above everything
+  document.body.appendChild(btnArrow);
+  
+  // 3. Pin it exactly where it just was, with absolutely no visual jump
+  btnArrow.style.position = 'fixed';
+  btnArrow.style.left = rect.left + 'px';
+  btnArrow.style.top = rect.top + 'px';
+  btnArrow.style.width = rect.width + 'px';
+  btnArrow.style.height = rect.height + 'px';
+  btnArrow.style.margin = '0';
+  btnArrow.style.zIndex = '9999';
+  
+  // Keep the stroke color matching the button's text color perfectly
+  const btnStyle = window.getComputedStyle(analyzeBtn);
+  btnArrow.style.stroke = btnStyle.color;
+  
+  // 4. Force reflow to cement the position
+  void btnArrow.offsetWidth;
+  
+  // 5. Trigger the pull away animation for the inputs
   inputSec.classList.add('pulled-away');
-  loader.classList.add('active');
+  
+  // 6. Animate the EXACT SAME arrow traveling in a beautiful arc to the center
+  // Different easings for left vs top creates a physical curve/arc trajectory!
+  btnArrow.style.transition = 'left 0.9s cubic-bezier(0.3, 1, 0.7, 1), top 0.9s cubic-bezier(0.7, 0, 0.3, 1), transform 0.9s cubic-bezier(0.5, 0, 0.2, 1), stroke 0.9s ease';
+  
+  btnArrow.style.left = '50%';
+  btnArrow.style.top = '50%';
+  btnArrow.style.transform = 'translate(-50%, -50%) scale(3)'; // Arrow scales up
+  btnArrow.style.stroke = 'var(--accent)'; // Arrow becomes blue
   
   // Hide position layout flow immediately after animation starts
   setTimeout(() => {
     inputSec.style.position = 'absolute';
   }, 400);
+  
+  // 7. Once it reaches the center, it seamlessly "curves into a circular loading motion" by spinning!
+  setTimeout(() => {
+    btnArrow.classList.add('spinning-loader');
+    document.getElementById('loaderText').classList.add('active');
+  }, 900);
   
   try {
     const res = await fetch('/api/detect', {
@@ -680,18 +601,25 @@ async function runAnalysis(event) {
     const data = await res.json();
     lastReport = data;
     
-    // Minimum 2 seconds to let the beautiful detach-and-spin animation play
+    // Give the cinematic sequence enough time to play (min 2 seconds)
     setTimeout(() => {
-      loader.classList.remove('active');
-      setTimeout(() => renderResults(data), 400);
+      // Fade out the spinning arrow before revealing results
+      btnArrow.style.transition = 'opacity 0.4s ease';
+      btnArrow.style.opacity = '0';
+      document.getElementById('loaderText').classList.remove('active');
+      
+      setTimeout(() => {
+        // Arrow is now invisible, render results
+        renderResults(data);
+      }, 400);
     }, 2000);
     
   } catch(e) {
-    loader.classList.remove('active');
+    document.getElementById('loaderText').classList.remove('active');
     setTimeout(() => {
       inputSec.style.position = 'relative';
       inputSec.classList.remove('pulled-away');
-      btnArrow.style.opacity = '1';
+      resetView(); // puts arrow back
       showToast(e.message);
     }, 400);
   }
@@ -699,45 +627,32 @@ async function runAnalysis(event) {
 
 function renderResults(data) {
   resSec.style.display = 'flex';
-  
-  // Trigger reflow for CSS animation
   void resSec.offsetWidth;
   resSec.classList.add('visible');
   
   const pct = data.overall_similarity;
   
-  // Dynamic Gradients for Textured Immersive Fonts
   let color = 'var(--success)';
-  let gradient = 'linear-gradient(135deg, #34c759, #30b0c7)'; // Green to Teal
+  let gradient = 'linear-gradient(135deg, #34c759, #30b0c7)'; 
+  if (pct >= 55) { color = 'var(--danger)'; gradient = 'linear-gradient(135deg, #ff3b30, #ff9500)'; }
+  else if (pct >= 35) { color = 'var(--warning)'; gradient = 'linear-gradient(135deg, #ff9500, #ffcc00)'; }
   
-  if (pct >= 55) {
-    color = 'var(--danger)';
-    gradient = 'linear-gradient(135deg, #ff3b30, #ff9500)'; // Red to Orange
-  } else if (pct >= 35) {
-    color = 'var(--warning)';
-    gradient = 'linear-gradient(135deg, #ff9500, #ffcc00)'; // Orange to Yellow
-  }
-  
-  // Apply Gradient Texture to Gauge Number
   const scoreValStr = document.getElementById('scoreValStr');
   scoreValStr.style.background = gradient;
   scoreValStr.style.webkitBackgroundClip = 'text';
   scoreValStr.style.webkitTextFillColor = 'transparent';
   
-  // Apply Gradient Texture to Verdict Title
   const vt = document.getElementById('verdictTitle');
   vt.textContent = data.verdict;
   vt.style.background = gradient;
   vt.style.webkitBackgroundClip = 'text';
   vt.style.webkitTextFillColor = 'transparent';
   
-  // Animate Gauge Line
   const fg = document.getElementById('gaugeFg');
   fg.style.stroke = color;
   const offset = 502.65 - (pct / 100) * 502.65;
   setTimeout(() => fg.style.strokeDashoffset = offset, 200); 
   
-  // Animate Numbers
   animateVal('scoreValStr', 0, pct, 1800);
   animateVal('statMatches', 0, data.matches.length, 1200);
   animateVal('statSrc', 0, data.source_sections, 1200);
@@ -748,7 +663,6 @@ function renderResults(data) {
     pct >= 35 ? 'Moderate similarity found. Indicates paraphrasing or shared sources.' :
     'Low similarity. Documents appear original.';
     
-  // Matches
   const list = document.getElementById('matchList');
   list.innerHTML = '';
   
@@ -783,8 +697,6 @@ function renderResults(data) {
         </div>
       `;
       list.appendChild(card);
-      
-      // Staggered 3D entrance
       setTimeout(() => card.classList.add('show'), 200 * i + 400);
     });
   }
