@@ -54,6 +54,10 @@ HTML = r"""<!DOCTYPE html>
     --apple-ease: cubic-bezier(0.25, 1, 0.3, 1);
     --bounce-ease: cubic-bezier(0.34, 1.56, 0.64, 1);
     
+    /* Dynamic Arrow Start Pos */
+    --startX: 50%;
+    --startY: 50%;
+    
     /* Light Mode Defaults */
     --bg-color: #fbfbfd;
     --text-main: #1d1d1f;
@@ -167,8 +171,12 @@ HTML = r"""<!DOCTYPE html>
   .container { max-width: 1100px; margin: 0 auto; padding: 7rem 2rem 4rem; display: flex; flex-direction: column; align-items: center; }
   
   /* Cinematic Transition Container */
-  .input-section { width: 100%; transition: all 0.8s var(--apple-ease); transform-origin: center top; }
-  .input-section.hidden { opacity: 0; transform: scale(0.9) translateY(-20px); filter: blur(10px); pointer-events: none; position: absolute; }
+  .input-section { width: 100%; transition: all 0.9s cubic-bezier(0.68, -0.15, 0.26, 1.15); transform-origin: center center; }
+  
+  /* The "Pull Away" animation */
+  .input-section.pulled-away {
+    opacity: 0; transform: scale(0.7) translateY(-40px); filter: blur(15px); pointer-events: none; position: absolute;
+  }
 
   /* Glassmorphism Cards with Immersive Noise Texture */
   .glass {
@@ -231,31 +239,44 @@ HTML = r"""<!DOCTYPE html>
   .dark .btn-primary { background: linear-gradient(135deg, #fff, #bbb); color: #000; }
   .btn-primary:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 12px 28px rgba(0,0,0,0.25); }
   
+  #btnArrow { transition: opacity 0.2s; }
+  
   .btn-secondary {
     background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
   }
   .btn-secondary:hover { transform: translateY(-2px); background: var(--glass-border); }
 
-  /* Smooth Arrow to Ring Loader Sequence */
+  /* Dynamic Arrow Detach & Loader Animation */
   .loader-container {
     position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; justify-content: center; align-items: center;
-    pointer-events: none; opacity: 0; transition: opacity 0.4s;
+    pointer-events: none; opacity: 1; /* Keep active to track arrow */
   }
-  .loader-container.active { opacity: 1; pointer-events: all; }
   
-  .loader-animation-wrapper { position: relative; width: 60px; height: 60px; margin-bottom: 1.5rem; display: flex; justify-content: center; align-items: center; }
+  .loader-animation-wrapper { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; display: flex; justify-content: center; align-items: center; }
   
-  .loader-arrow { position: absolute; opacity: 0; }
+  .loader-arrow {
+    position: fixed;
+    /* Intentionally no left/top here. It will be controlled by animation */
+    opacity: 0;
+    pointer-events: none;
+  }
+  
   .loader-container.active .loader-arrow {
-    animation: arrowFlyIn 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    animation: arrowJourney 1.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   }
-  @keyframes arrowFlyIn {
-    0% { opacity: 0; transform: translateY(150px) scale(0.5); }
-    30% { opacity: 1; transform: translateY(-10px) scale(1.2); }
-    45% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
-    65% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
-    100% { opacity: 0; transform: translateY(0) scale(0) rotate(720deg); }
+  
+  @keyframes arrowJourney {
+    /* 0%: Arrow is perfectly over the button's arrow */
+    0% { left: var(--startX); top: var(--startY); opacity: 1; transform: translate(0, 0) scale(1) rotate(0deg); stroke: var(--bg-color); }
+    /* 20%: Arrow holds there while the input section gets "pulled away" */
+    20% { left: var(--startX); top: var(--startY); opacity: 1; transform: translate(0, 0) scale(1) rotate(0deg); stroke: var(--bg-color); }
+    /* 50%: Arrow moves to center and scales up */
+    50% { left: 50%; top: 50%; opacity: 1; transform: translate(-50%, -50%) scale(2) rotate(0deg); stroke: var(--accent); }
+    /* 70%: Arrow holds in center briefly */
+    70% { left: 50%; top: 50%; opacity: 1; transform: translate(-50%, -50%) scale(2) rotate(0deg); stroke: var(--accent); }
+    /* 100%: Arrow spins rapidly and disappears into the ring */
+    100% { left: 50%; top: 50%; opacity: 0; transform: translate(-50%, -50%) scale(0.2) rotate(720deg); stroke: var(--accent); }
   }
 
   .spinner-3d {
@@ -264,7 +285,7 @@ HTML = r"""<!DOCTYPE html>
     opacity: 0; transform: scale(0);
   }
   .loader-container.active .spinner-3d {
-    animation: ringPop 0.4s 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, spin3D 1s 0.8s cubic-bezier(0.68, -0.55, 0.26, 1.55) infinite;
+    animation: ringPop 0.4s 1.1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, spin3D 1s 1.1s cubic-bezier(0.68, -0.55, 0.26, 1.55) infinite;
   }
   @keyframes ringPop {
     from { opacity: 0; transform: scale(0); }
@@ -275,9 +296,12 @@ HTML = r"""<!DOCTYPE html>
     100% { transform: scale(1) rotateX(180deg) rotateY(360deg) rotateZ(360deg); }
   }
   
-  .loader-text { font-size: 1.2rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--text-main); opacity: 0; }
+  .loader-text { 
+    font-size: 1.2rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--text-main); 
+    opacity: 0; position: fixed; top: calc(50% + 60px); left: 50%; transform: translateX(-50%);
+  }
   .loader-container.active .loader-text {
-    animation: textFadeIn 0.4s 0.9s forwards, pulse 1.5s 1.3s infinite;
+    animation: textFadeIn 0.4s 1.2s forwards, pulse 1.5s 1.6s infinite;
   }
   @keyframes textFadeIn { to { opacity: 1; } }
   
@@ -441,11 +465,13 @@ HTML = r"""<!DOCTYPE html>
 </nav>
 
 <div class="loader-container" id="loader">
+  <!-- Dynamic detached arrow -->
+  <svg class="loader-arrow" id="loaderArrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="5" y1="12" x2="19" y2="12"></line>
+    <polyline points="12 5 19 12 12 19"></polyline>
+  </svg>
+
   <div class="loader-animation-wrapper">
-    <svg class="loader-arrow" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <line x1="12" y1="19" x2="12" y2="5"></line>
-      <polyline points="5 12 12 5 19 12"></polyline>
-    </svg>
     <div class="spinner-3d"></div>
   </div>
   <div class="loader-text">Analyzing</div>
@@ -478,7 +504,14 @@ HTML = r"""<!DOCTYPE html>
     </div>
     
     <div class="actions">
-      <button class="btn-primary" onclick="runAnalysis()">Analyze Documents</button>
+      <!-- The button with the arrow that gets "detached" -->
+      <button class="btn-primary" onclick="runAnalysis(event)">
+        Analyze Documents
+        <svg id="btnArrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px;">
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+          <polyline points="12 5 19 12 12 19"></polyline>
+        </svg>
+      </button>
       <button class="btn-secondary" onclick="loadSample('para')">Demo: Paraphrase</button>
       <button class="btn-secondary" onclick="loadSample('light')">Demo: Light Edit</button>
       <button class="btn-secondary" onclick="loadSample('diff')">Demo: Unrelated</button>
@@ -565,6 +598,7 @@ const suspectEl = document.getElementById('suspect');
 const inputSec = document.getElementById('inputSection');
 const resSec = document.getElementById('resultsSection');
 const loader = document.getElementById('loader');
+const btnArrow = document.getElementById('btnArrow');
 
 sourceEl.addEventListener('input', () => updateCount('source', 'srcCount'));
 suspectEl.addEventListener('input', () => updateCount('suspect', 'susCount'));
@@ -592,7 +626,9 @@ function resetView() {
   setTimeout(() => {
     resSec.style.display = 'none';
     inputSec.style.position = 'relative';
-    inputSec.classList.remove('hidden');
+    inputSec.classList.remove('pulled-away');
+    btnArrow.style.opacity = '1'; // Restore the button arrow
+    
     // reset gauge
     const fg = document.getElementById('gaugeFg');
     fg.style.transition = 'none';
@@ -614,18 +650,24 @@ function animateVal(id, start, end, dur) {
   requestAnimationFrame(step);
 }
 
-async function runAnalysis() {
+async function runAnalysis(event) {
   const src = sourceEl.value.trim();
   const sus = suspectEl.value.trim();
   if (!src || !sus) { showToast('Please enter both documents'); return; }
   
-  // Cinematic Transition: Hide inputs, show loader
-  inputSec.classList.add('hidden');
+  // Calculate exact screen coordinates of the arrow inside the button
+  const rect = btnArrow.getBoundingClientRect();
+  document.documentElement.style.setProperty('--startX', rect.left + 'px');
+  document.documentElement.style.setProperty('--startY', rect.top + 'px');
   
-  // Start arrow sequence
+  // Detach arrow and trigger choreo
+  btnArrow.style.opacity = '0';
+  inputSec.classList.add('pulled-away');
+  loader.classList.add('active');
+  
+  // Hide position layout flow immediately after animation starts
   setTimeout(() => {
     inputSec.style.position = 'absolute';
-    loader.classList.add('active');
   }, 400);
   
   try {
@@ -638,17 +680,18 @@ async function runAnalysis() {
     const data = await res.json();
     lastReport = data;
     
-    // Give the cinematic sequence enough time to play (min 1.8 seconds)
+    // Minimum 2 seconds to let the beautiful detach-and-spin animation play
     setTimeout(() => {
       loader.classList.remove('active');
       setTimeout(() => renderResults(data), 400);
-    }, 1800);
+    }, 2000);
     
   } catch(e) {
     loader.classList.remove('active');
     setTimeout(() => {
       inputSec.style.position = 'relative';
-      inputSec.classList.remove('hidden');
+      inputSec.classList.remove('pulled-away');
+      btnArrow.style.opacity = '1';
       showToast(e.message);
     }, 400);
   }
