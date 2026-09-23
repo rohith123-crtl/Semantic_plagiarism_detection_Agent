@@ -237,24 +237,50 @@ HTML = r"""<!DOCTYPE html>
   }
   .btn-secondary:hover { transform: translateY(-2px); background: var(--glass-border); }
 
-  /* Loader */
+  /* Smooth Arrow to Ring Loader Sequence */
   .loader-container {
     position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; justify-content: center; align-items: center;
-    opacity: 0; pointer-events: none; transition: opacity 0.5s var(--apple-ease);
+    pointer-events: none; opacity: 0; transition: opacity 0.4s;
   }
   .loader-container.active { opacity: 1; pointer-events: all; }
   
+  .loader-animation-wrapper { position: relative; width: 60px; height: 60px; margin-bottom: 1.5rem; display: flex; justify-content: center; align-items: center; }
+  
+  .loader-arrow { position: absolute; opacity: 0; }
+  .loader-container.active .loader-arrow {
+    animation: arrowFlyIn 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+  @keyframes arrowFlyIn {
+    0% { opacity: 0; transform: translateY(150px) scale(0.5); }
+    30% { opacity: 1; transform: translateY(-10px) scale(1.2); }
+    45% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+    65% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+    100% { opacity: 0; transform: translateY(0) scale(0) rotate(720deg); }
+  }
+
   .spinner-3d {
-    width: 60px; height: 60px; border-radius: 50%; border: 4px solid transparent; border-top-color: var(--accent); border-right-color: var(--accent);
-    animation: spin3D 1s cubic-bezier(0.68, -0.55, 0.26, 1.55) infinite; margin-bottom: 1.5rem;
+    position: absolute; width: 100%; height: 100%; border-radius: 50%;
+    border: 4px solid transparent; border-top-color: var(--accent); border-right-color: var(--accent);
+    opacity: 0; transform: scale(0);
+  }
+  .loader-container.active .spinner-3d {
+    animation: ringPop 0.4s 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, spin3D 1s 0.8s cubic-bezier(0.68, -0.55, 0.26, 1.55) infinite;
+  }
+  @keyframes ringPop {
+    from { opacity: 0; transform: scale(0); }
+    to { opacity: 1; transform: scale(1); }
   }
   @keyframes spin3D {
-    0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
-    100% { transform: rotateX(180deg) rotateY(360deg) rotateZ(360deg); }
+    0% { transform: scale(1) rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+    100% { transform: scale(1) rotateX(180deg) rotateY(360deg) rotateZ(360deg); }
   }
-  .loader-text { font-size: 1.2rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--text-main); animation: pulse 1.5s infinite; transition: color 0.6s; }
-  @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-
+  
+  .loader-text { font-size: 1.2rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--text-main); opacity: 0; }
+  .loader-container.active .loader-text {
+    animation: textFadeIn 0.4s 0.9s forwards, pulse 1.5s 1.3s infinite;
+  }
+  @keyframes textFadeIn { to { opacity: 1; } }
+  
   /* Results (Creative Entrance) */
   .results-section {
     width: 100%; display: none; flex-direction: column; gap: 2rem;
@@ -415,7 +441,13 @@ HTML = r"""<!DOCTYPE html>
 </nav>
 
 <div class="loader-container" id="loader">
-  <div class="spinner-3d"></div>
+  <div class="loader-animation-wrapper">
+    <svg class="loader-arrow" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="19" x2="12" y2="5"></line>
+      <polyline points="5 12 12 5 19 12"></polyline>
+    </svg>
+    <div class="spinner-3d"></div>
+  </div>
   <div class="loader-text">Analyzing</div>
 </div>
 
@@ -590,6 +622,7 @@ async function runAnalysis() {
   // Cinematic Transition: Hide inputs, show loader
   inputSec.classList.add('hidden');
   
+  // Start arrow sequence
   setTimeout(() => {
     inputSec.style.position = 'absolute';
     loader.classList.add('active');
@@ -605,11 +638,11 @@ async function runAnalysis() {
     const data = await res.json();
     lastReport = data;
     
-    // Simulate delay for dramatic effect
+    // Give the cinematic sequence enough time to play (min 1.8 seconds)
     setTimeout(() => {
       loader.classList.remove('active');
       setTimeout(() => renderResults(data), 400);
-    }, 800);
+    }, 1800);
     
   } catch(e) {
     loader.classList.remove('active');
